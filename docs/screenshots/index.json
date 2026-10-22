@@ -113,5 +113,25 @@
     "name": "23-page-not-found",
     "title": "Old or mistyped link: friendly page with a way home",
     "file": "23-page-not-found.png"
+  },
+  {
+    "name": "24-search-telugu-name",
+    "title": "Search by the name shops use: \"డోలో\" finds Dolo 650",
+    "file": "24-search-telugu-name.png"
+  },
+  {
+    "name": "25-admin-medicine",
+    "title": "Medicines: other names, several barcodes, extra details, batches and change history",
+    "file": "25-admin-medicine.png"
+  },
+  {
+    "name": "28-admin-data-fields",
+    "title": "Data fields: add your own fields to medicines, shops and distributors",
+    "file": "28-admin-data-fields.png"
+  },
+  {
+    "name": "29-shop-licence-warning",
+    "title": "Licence expiring in 20 days: the shop is warned before ordering stops",
+    "file": "29-shop-licence-warning.png"
   }
 ]
