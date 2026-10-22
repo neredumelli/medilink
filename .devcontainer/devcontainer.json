@@ -14,5 +14,18 @@
     }
   },
   "postCreateCommand": "bash .devcontainer/setup.sh",
-  "postStartCommand": "docker compose -f infra/docker-compose.yml up -d postgres redis"
+  "postStartCommand": "docker compose -f infra/docker-compose.yml up -d postgres redis",
+  "postAttachCommand": {
+    "app": "pnpm dev"
+  },
+  "customizations": {
+    "codespaces": {
+      "openFiles": [
+        "README.md"
+      ]
+    }
+  },
+  "hostRequirements": {
+    "cpus": 4
+  }
 }
