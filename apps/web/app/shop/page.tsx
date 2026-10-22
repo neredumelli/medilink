@@ -135,7 +135,7 @@ export default function ShopHome() {
                 </span>
                 <span>
                   <b>{t('reorder')}</b>
-                  <small>{home?.lastDelivered ? `${home.lastDelivered.items.length} items, 1 tap` : 'No past orders yet'}</small>
+                  <small>{home?.lastDelivered ? `${home.lastDelivered.items.length} ${t('itemsOneTap')}` : t('noOrdersYet')}</small>
                 </span>
               </button>
               <button className="tile c-sun" onClick={() => setPaste(true)}>
@@ -144,7 +144,7 @@ export default function ShopHome() {
                 </span>
                 <span>
                   <b>{t('pasteList')}</b>
-                  <small>We read it for you</small>
+                  <small>{t('weReadIt')}</small>
                 </span>
               </button>
               <button className="tile c-coral" onClick={() => router.push('/shop/list')}>
@@ -154,7 +154,7 @@ export default function ShopHome() {
                 {(home?.chips.shortageCount ?? 0) > 0 && <span className="count">{home!.chips.shortageCount}</span>}
                 <span>
                   <b>{t('shortageList')}</b>
-                  <small>Shared with staff</small>
+                  <small>{t('sharedWithStaff')}</small>
                 </span>
               </button>
               <button className="tile c-sky" onClick={() => toast('Scanning works in the Android and iPhone apps')}>
@@ -163,7 +163,7 @@ export default function ShopHome() {
                 </span>
                 <span>
                   <b>{t('scan')}</b>
-                  <small>In the phone app</small>
+                  <small>{t('inPhoneApp')}</small>
                 </span>
               </button>
             </div>
@@ -189,14 +189,14 @@ export default function ShopHome() {
             {home?.latestOpen && (
               <section className="card">
                 <div className="sec-h">
-                  <h2>{home.latestOpen.status === 'DISPATCHED' ? 'Arriving soon' : 'Latest order'}</h2>
+                  <h2>{home.latestOpen.status === 'DISPATCHED' ? t('arrivingSoon') : t('latestOrder')}</h2>
                   <button className="linkbtn" onClick={() => router.push('/shop/orders')}>
-                    All orders
+                    {t('allOrders')}
                   </button>
                 </div>
                 <div className="row-b">
                   <b>{home.latestOpen.distributor}</b>
-                  <span className="hint">{home.latestOpen.itemCount} items</span>
+                  <span className="hint">{home.latestOpen.itemCount} {t('items')}</span>
                 </div>
                 <StatusTracker status={home.latestOpen.status} />
               </section>

@@ -3,6 +3,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { Lang, MessageKey, t as translate } from '@medilink/core';
 import { api, clearSession, hasStoredSession } from './api';
+import { SystemStatus } from '@/components/SystemStatus';
 
 export interface Me {
   id: string;
@@ -89,6 +90,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
+      <SystemStatus />
       {toastMsg && (
         <div className="toast" role="status">
           {toastMsg}

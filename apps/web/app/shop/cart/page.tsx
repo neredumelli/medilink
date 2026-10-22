@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, ApiError } from '@/lib/api';
@@ -47,6 +47,9 @@ export default function CartPage() {
   const { refresh, takeElapsed, home } = useShop();
   const router = useRouter();
   const [cart, setCart] = useState<Cart | null>(null);
+  /** One key per placement attempt: a retry after a lost connection reuses it, so the order is never created twice. */
+  const placeKey = useRef<string | null>(null);
+  const newKey = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => setCart(await api<Cart>('/shop/cart')), []);
@@ -56,6 +59,7 @@ export default function CartPage() {
 
   async function change(productId: string, body: { qty: number; distributorId?: string }) {
     try {
+      placeKey.current = null;
       await api(`/shop/cart/${productId}`, { method: 'PUT', body });
       await Promise.all([load(), refresh()]);
     } catch (e) {
@@ -63,19 +67,26 @@ export default function CartPage() {
     }
   }
   async function remove(productId: string) {
+    placeKey.current = null;
     await api(`/shop/cart/${productId}`, { method: 'DELETE' });
     await Promise.all([load(), refresh()]);
   }
   async function place() {
     setBusy(true);
     try {
+      placeKey.current ??= newKey();
       const res = await api<{ orders: { number: string; distributorName: string }[]; totalPaise: number; timeToPlaceSec: number | null }>('/shop/orders', {
         body: { timeToPlaceSec: takeElapsed(), source: 'WEB' },
+        headers: { 'Idempotency-Key': placeKey.current },
       });
+      placeKey.current = null;
       sessionStorage.setItem('ml.justPlaced', JSON.stringify(res));
       await refresh();
       router.push('/shop/orders');
     } catch (e) {
+      // A clear answer from the server (e.g. cart changed, credit limit) means this attempt is finished: next tap is a new order.
+      // No answer (connection lost, server down) keeps the key, so tapping again cannot create a duplicate.
+      if (e instanceof ApiError && e.status >= 400 && e.status < 500) placeKey.current = null;
       toast(e instanceof ApiError ? e.message : 'Could not place the order');
       await load();
     } finally {

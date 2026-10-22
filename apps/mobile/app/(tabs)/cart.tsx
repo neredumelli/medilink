@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -29,6 +29,7 @@ export default function CartScreen() {
   const router = useRouter();
   const { t: tr, toast, refreshCart, takeElapsed } = useSession();
   const [cart, setCart] = useState<Cart | null>(null);
+  const placeKey = useRef<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => setCart(await api<Cart>('/shop/cart')), []);
@@ -39,18 +40,26 @@ export default function CartScreen() {
   );
 
   async function remove(productId: string) {
+    placeKey.current = null;
     await api(`/shop/cart/${productId}`, { method: 'DELETE' });
     await Promise.all([load(), refreshCart()]);
   }
   async function place() {
     setBusy(true);
     try {
-      const r = await api<{ orders: { distributorName: string }[]; totalPaise: number; timeToPlaceSec: number | null }>('/shop/orders', { body: { timeToPlaceSec: takeElapsed(), source: 'APP' } });
+      // Same key on a retry after a lost connection, so the order can never be created twice.
+      placeKey.current ??= `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+      const r = await api<{ orders: { distributorName: string }[]; totalPaise: number; timeToPlaceSec: number | null }>('/shop/orders', {
+        body: { timeToPlaceSec: takeElapsed(), source: 'APP' },
+        headers: { 'Idempotency-Key': placeKey.current },
+      });
+      placeKey.current = null;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       await refreshCart();
       toast(`${tr('ordersSent')} ${r.orders.map((o) => o.distributorName).join(', ')} · ${inr0(r.totalPaise)}`);
       router.push('/orders');
     } catch (e) {
+      if (e instanceof ApiError && e.status >= 400 && e.status < 500) placeKey.current = null;
       toast(e instanceof ApiError ? e.message : 'Could not place the order');
       await load();
     } finally {

@@ -184,6 +184,34 @@ await step('shop sees billed', async () => {
   await shot(shop, '20-shop-sees-billed', 'Shop sees the order billed by the distributor', { wait: 1000 });
 });
 
+// ---------------- When things go wrong ----------------
+await step('admin settings + maintenance on', async () => {
+  await adm.goto(`${BASE}/admin/settings`);
+  await adm.getByLabel(/message to show/i).fill('Upgrading for faster search. Back in 30 minutes.');
+  const back = new Date(Date.now() + 30 * 60000);
+  const pad = (n) => String(n).padStart(2, '0');
+  await adm.getByLabel(/expected back by/i).fill(`${back.getFullYear()}-${pad(back.getMonth() + 1)}-${pad(back.getDate())}T${pad(back.getHours())}:${pad(back.getMinutes())}`);
+  await adm.getByRole('button', { name: /turn on maintenance mode/i }).click();
+  await adm.getByRole('button', { name: /yes, turn on now/i }).click();
+  await adm.getByText(/ON: shops see/i).waitFor({ timeout: 15000 });
+  await shot(adm, '21-admin-settings-maintenance', 'Admin settings: one switch for planned maintenance, with message and return time', { fullPage: true, wait: 800 });
+});
+await step('shop sees maintenance', async () => {
+  await shop.waitForTimeout(6000); // settings cache is 5 seconds
+  await shop.goto(`${BASE}/shop`);
+  await shop.waitForSelector('.sysscreen', { timeout: 20000 });
+  await shot(shop, '22-shop-maintenance-screen', 'Shop during maintenance: friendly screen in their language, checks again by itself', { wait: 800 });
+});
+await step('maintenance off', async () => {
+  await adm.getByRole('button', { name: /turn off/i }).click();
+  await adm.getByText(/Off: everyone/i).waitFor({ timeout: 15000 });
+});
+await step('page not found', async () => {
+  await shop.goto(`${BASE}/this-link-is-old`);
+  await shop.waitForSelector('.errscreen', { timeout: 15000 });
+  await shot(shop, '23-page-not-found', 'Old or mistyped link: friendly page with a way home', { wait: 500 });
+});
+
 fs.writeFileSync(path.join(OUT, 'index.json'), JSON.stringify(results, null, 2));
 await browser.close();
 console.log(`Done: ${results.length} screenshots`);

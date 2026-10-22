@@ -9,6 +9,7 @@ export function AdminTabs() {
   const tabs = [
     { href: '/admin', label: 'Overview' },
     { href: '/admin/users', label: 'Users & access' },
+    { href: '/admin/settings', label: 'Settings' },
   ];
   return (
     <div className="seg" role="tablist" aria-label="Admin sections" style={{ background: 'rgba(255,255,255,.16)' }}>

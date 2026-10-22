@@ -32,7 +32,8 @@ export class AllErrorsFilter implements ExceptionFilter {
       body = { message: "We're having a technical problem. Please try again in a few minutes.", down: true };
     }
 
-    if (status >= 500) {
+    // Log real failures only (planned maintenance and other deliberate 5xx answers are not errors).
+    if (!(exception instanceof HttpException) && status >= 500) {
       const err = exception as Error;
       this.logger.error(`${ref} ${req?.method} ${req?.url} → ${status}: ${err?.message ?? exception}`, err?.stack);
     }

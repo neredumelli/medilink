@@ -1,14 +1,21 @@
 import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
+import { setSystem } from './system';
 
 const BASE = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:4000/api';
 const RT_KEY = 'ml_refresh';
 let accessToken: string | null = null;
 let refreshing: Promise<boolean> | null = null;
 
+export const APP_VERSION: string = Constants.expoConfig?.version ?? '0.0.0';
+export const API_BASE = BASE;
+const TIMEOUT_MS = 30_000;
+
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    public ref?: string,
   ) {
     super(message);
   }
@@ -45,24 +52,42 @@ async function refresh(): Promise<boolean> {
   return refreshing;
 }
 
-export async function api<T = any>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
+export async function api<T = any>(path: string, opts: { method?: string; body?: unknown; headers?: Record<string, string> } = {}): Promise<T> {
   if (!accessToken && !path.startsWith('/auth/otp')) await refresh();
-  const go = () =>
-    fetch(`${BASE}${path}`, {
+  const go = () => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    return fetch(`${BASE}${path}`, {
       method: opts.method ?? (opts.body !== undefined ? 'POST' : 'GET'),
-      headers: { 'content-type': 'application/json', 'x-device-name': 'Phone app', ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}) },
+      headers: {
+        'content-type': 'application/json',
+        'x-device-name': 'Phone app',
+        'x-app-version': APP_VERSION,
+        ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+        ...(opts.headers ?? {}),
+      },
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-    });
+      signal: ctrl.signal,
+    }).finally(() => clearTimeout(timer));
+  };
   let res: Response;
   try {
     res = await go();
     if (res.status === 401 && (await refresh())) res = await go();
-  } catch {
+  } catch (e) {
+    if ((e as Error)?.name === 'AbortError') throw new ApiError(0, 'This is taking too long. Please try again.');
+    // Phones do not tell us reliably whether it is our server or their signal, so we say "offline" (the common case).
+    setSystem({ kind: 'offline' });
     throw new ApiError(0, 'No internet connection. Please check and try again.');
   }
   if (!res.ok) {
     const b = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, typeof b.message === 'string' ? b.message : 'Something went wrong. Please try again.');
+    const msg = typeof b.message === 'string' ? b.message : 'Something went wrong. Please try again.';
+    if (res.status === 503 && b.maintenance) setSystem({ kind: 'maintenance', message: msg, until: b.until ?? null });
+    else if (res.status === 426 || b.updateRequired) setSystem({ kind: 'update' });
+    else if (res.status === 502 || res.status === 503 || res.status === 504) setSystem({ kind: 'down', ref: b.ref });
+    throw new ApiError(res.status, msg, b.ref);
   }
+  setSystem({ kind: 'ok' });
   return res.json();
 }
