@@ -16,6 +16,9 @@ B2B ordering for pharmacies, distributors and sales reps in India. Shops search 
 | `docs/architecture.md` | Diagram and key decisions | |
 
 ## Run it locally
+**Windows, one click:** double-click `start-medilink.bat`. It installs what is missing, starts the database, loads demo data the first time and opens the app. Run `start-medilink.bat reset` to wipe the database and reload demo data.
+
+Manual steps:
 Requirements: Node 20.12+, pnpm 9, Docker Desktop (for PostgreSQL).
 
 ```bash
