@@ -107,7 +107,7 @@ One pipeline for products, shops, distributors, price lists, schemes, stock, ope
 | Scheme expires mid-cart | Same as above; free quantity recalculated | ⏳ P2 |
 | Over credit limit | Blocked per distributor; suggest moving items or paying dues | ✅ |
 | Two phones in the same shop order at once | Credit rows locked; second order sees the updated credit | ✅ |
-| Double tap / network retry on Place order | **Idempotency key**: the repeat returns the first result, no duplicate | ⏳ next |
+| Double tap / network retry on Place order | **Idempotency key** (web + phone): the repeat returns the first result, no duplicate | ✅ |
 | Out of stock everywhere | Same-salt substitutes + "tell me when back" | ✅ / notify ⏳ P3 |
 | Partial supply | Billed qty recorded; "get the rest from another distributor" | ✅ |
 | Distributor doesn't accept within X hours | Reminder to distributor, then escalation to admin; shop told and offered re-routing | ⏳ P2 |
@@ -146,16 +146,16 @@ One pipeline for products, shops, distributors, price lists, schemes, stock, ope
 
 | Scenario | What the user sees | What the system does | Status |
 |---|---|---|---|
-| Planned maintenance | "Upgrading, back by 11:30 pm. Your cart is saved." | Maintenance mode from admin; auto-reopens | ⏳ next |
+| Planned maintenance | "Upgrading, back by 11:30 pm. Your cart is saved." | Admin › Settings switch with message + return time; screens re-check every 30 s and reopen by themselves | ✅ |
 | API crashes | Caddy fallback page: "Technical problem, back in a few minutes" | Container auto-restarts; alert sent | ⏳ deploy pkg |
 | Whole server down | App shows built-in "We'll be back" screen + status page link | Status page on a separate machine; alert; restore runbook | ⏳ deploy pkg |
 | Database down | Fallback page | Auto-restart; if the disk failed, restore from backup (RTO ≤ 1 h) | ⏳ deploy pkg |
 | Disk full | — (prevented) | Alert at 70% and 85%; log rotation; backups off-server | ⏳ deploy pkg |
-| Bug on one screen | "Something went wrong. [Try again] · Ref ML-7F3K2" | Error boundary; error logged with reference | ⏳ next |
-| One action fails | Clear reason + "your cart is saved" + retry | Transaction rolled back; safe retry via idempotency | 🟡 rollback ✅ |
-| Slow server | "Still working…" after 5 s; timeout at 30 s with retry | Request timeouts; slow-query log | ⏳ next |
-| User's internet off | "You're offline" (different from "we are down") | Connectivity check vs health check | ⏳ next |
-| Old app version | "Please update to continue" | Minimum version setting | ⏳ next |
+| Bug on one screen | "Something went wrong. [Try again] · Ref ML-7F3K2" | Error boundary on web and phone; error logged with reference | ✅ |
+| One action fails | Clear reason + "your cart is saved" + retry | Transaction rolled back; safe retry via idempotency | ✅ |
+| Slow server | "Still working…" after 5 s; timeout at 30 s with retry | Request timeouts (30 s) + "Still working…" bar; slow-query log ⏳ | 🟡 screens ✅ |
+| User's internet off | "You're offline" (different from "we are down") | Connectivity check vs health check | ✅ |
+| Old app version | "Please update to continue" | Minimum version setting in Admin › Settings; phone sends its version | ✅ |
 | SMS provider down | OTP via WhatsApp or second SMS provider | Provider failover | ⏳ P4 |
 | WhatsApp / push down | Messages retried; failed list in admin for resend | Outbox retries + dead-letter list | 🟡 outbox ✅ |
 | Payment gateway down | "UPI unavailable, pay later from Account" | Order flow does not depend on payment | ⏳ P4 |
@@ -243,14 +243,14 @@ One pipeline for products, shops, distributors, price lists, schemes, stock, ope
 ## 13. Known gaps found in review
 | Gap | Fix | When |
 |---|---|---|
-| Some small labels stay in English on Telugu/Hindi screens (tile subtitles, "Latest order", "items") | Move every remaining label into the translation file; automated check that no screen text is hard-coded | Next round |
+| Some small labels stay in English on Telugu/Hindi screens (tile subtitles, "Latest order", "items") | Shop home labels done; automated check that no screen text is hard-coded | 🟡 |
 | UI screenshots and design book | Regenerated automatically from the real app (`Screenshots` workflow + `tools/design-book`) | ✅ |
 
 ## 14. Build order
 
-1. Upload the pending test fix (rate limit off in tests)
-2. **Friendly failure screens:** error boundary + reference codes, offline vs down, maintenance mode, minimum app version, timeouts
-3. **Duplicate-order protection** (idempotency keys)
+1. ~~Upload the pending test fix~~ ✅
+2. ✅ **Friendly failure screens:** error boundary + reference codes, offline vs down, maintenance mode, minimum app version, timeouts
+3. ✅ **Duplicate-order protection** (idempotency keys)
 4. **Data model upgrade:** reference tables, aliases, barcodes, packs, batches, price lists, schemes, custom fields, soft delete, history, banned/recalled products, licence expiry blocking, row-level security
 5. **Import Hub** with templates, preview and undo
 6. **Deployment package:** Caddy (HTTPS + fallback page), pgBackRest, restic, Uptime Kuma + status page, one-command install, rollback, monitoring
