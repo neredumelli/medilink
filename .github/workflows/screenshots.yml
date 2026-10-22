@@ -21,7 +21,6 @@ jobs:
       JWT_ACCESS_SECRET: screenshots-access
       JWT_REFRESH_SECRET: screenshots-refresh
       OTP_PROVIDER: console
-      NODE_ENV: development
       NO_COLOR: "1"
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
@@ -34,7 +33,7 @@ jobs:
       - run: pnpm --filter @medilink/api build && pnpm --filter @medilink/web build
       - name: Start API and web
         run: |
-          (cd apps/api && nohup node dist/main.js > "$GITHUB_WORKSPACE/api.log" 2>&1 &)
+          (cd apps/api && NODE_ENV=development nohup node dist/main.js > "$GITHUB_WORKSPACE/api.log" 2>&1 &)
           (cd apps/web && nohup npx next start -p 3000 > "$GITHUB_WORKSPACE/web.log" 2>&1 &)
           for i in $(seq 1 60); do curl -sf http://localhost:4000/api/health >/dev/null && curl -sf http://localhost:3000/login >/dev/null && break; sleep 2; done
           curl -sf http://localhost:4000/api/health
