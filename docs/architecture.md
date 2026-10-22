@@ -9,7 +9,6 @@ flowchart LR
   subgraph Cloud
     A[API<br/>NestJS]
     DB[(PostgreSQL<br/>+ pg_trgm)]
-    R[(Redis<br/>queues, Phase 2)]
   end
   subgraph Distributor PC
     S[Sync agent<br/>Node.js]
@@ -21,7 +20,6 @@ flowchart LR
   S -->|signed HMAC| A
   S <-->|CSV export / import| E
   A --> DB
-  A -.-> R
   C -. shared .- W
   C -. shared .- M
   C -. shared .- A

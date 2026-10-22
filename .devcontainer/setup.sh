@@ -7,7 +7,7 @@ corepack enable >/dev/null 2>&1 || npm install -g pnpm@9
 pnpm install
 [ -f apps/api/.env ] || cp .env.example apps/api/.env
 [ -f apps/web/.env.local ] || cp .env.example apps/web/.env.local
-docker compose -f infra/docker-compose.yml up -d postgres redis
+docker compose -f infra/docker-compose.yml up -d postgres
 echo "Waiting for the database..."
 until docker compose -f infra/docker-compose.yml exec -T postgres pg_isready -U medilink >/dev/null 2>&1; do sleep 2; done
 pnpm --filter @medilink/api prisma:deploy

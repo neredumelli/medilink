@@ -11,6 +11,7 @@ import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { Role } from '@prisma/client';
 import { config } from '../config';
+import { PrismaService } from '../prisma.service';
 
 export interface AuthUser {
   sub: string; // user id
@@ -40,21 +41,27 @@ export class JwtAuthGuard implements CanActivate {
   constructor(
     private readonly jwt: JwtService,
     private readonly reflector: Reflector,
+    private readonly prisma: PrismaService,
   ) {}
 
-  canActivate(ctx: ExecutionContext): boolean {
+  async canActivate(ctx: ExecutionContext): Promise<boolean> {
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC, [ctx.getHandler(), ctx.getClass()]);
     if (isPublic) return true;
     const req = ctx.switchToHttp().getRequest();
     const header: string | undefined = req.headers.authorization;
     const token = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
     if (!token) throw new UnauthorizedException('Please log in again');
+    let payload: AuthUser;
     try {
-      req.user = this.jwt.verify<AuthUser>(token, { secret: config().JWT_ACCESS_SECRET });
-      return true;
+      payload = this.jwt.verify<AuthUser>(token, { secret: config().JWT_ACCESS_SECRET });
     } catch {
       throw new UnauthorizedException('Your session has expired. Please log in again');
     }
+    // Look the user up on every request so a suspension or role change applies immediately.
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub }, select: { status: true, role: true, name: true, retailerId: true, distributorId: true } });
+    if (!user || user.status === 'SUSPENDED') throw new UnauthorizedException('This account is suspended. Please call support.');
+    req.user = { sub: payload.sub, role: user.role, name: user.name, retailerId: user.retailerId, distributorId: user.distributorId } satisfies AuthUser;
+    return true;
   }
 }
 

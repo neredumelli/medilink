@@ -7,6 +7,7 @@ import { useSession } from '@/lib/session';
 import { ago, inr0 } from '@/lib/format';
 import { Icon } from '@/components/Icon';
 import { ConsoleShell } from '@/components/ConsoleShell';
+import { AdminTabs } from '@/components/AdminTabs';
 
 interface Overview {
   activeShops: number;
@@ -95,7 +96,7 @@ export default function AdminPage() {
   const mx = Math.max(45, ...times);
 
   return (
-    <ConsoleShell allow={(r) => ['SUPER_ADMIN', 'ADMIN_OPS', 'SUPPORT'].includes(r)} eyebrow="Super admin" title="Platform overview">
+    <ConsoleShell allow={(r) => ['SUPER_ADMIN', 'ADMIN_OPS', 'SUPPORT'].includes(r)} eyebrow="Super admin" title="Platform overview" right={<AdminTabs />}>
       {ov && (
         <div className="kpis">
           <div className="kpi c-green">

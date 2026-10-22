@@ -116,7 +116,7 @@ if errorlevel 1 goto :fail
 
 REM ---------- 6. Database ----------
 echo [6/7] Starting the database...
-docker compose -f infra\docker-compose.yml up -d postgres redis
+docker compose -f infra\docker-compose.yml up -d postgres
 if errorlevel 1 goto :fail
 set /a tries=0
 :waitdb

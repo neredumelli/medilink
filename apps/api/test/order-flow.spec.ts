@@ -13,9 +13,12 @@ const codes = new Map<string, string>();
 
 describe('Shop → distributor order flow', () => {
   let app: INestApplication;
+  const tokens = new Map<string, string>(); // reuse logins: OTP requests are rate-limited (3 per 10 min)
   const login = async (mobile: string) => {
+    if (tokens.has(mobile)) return tokens.get(mobile)!;
     await request(app.getHttpServer()).post('/api/auth/otp/request').send({ mobile }).expect(200);
     const res = await request(app.getHttpServer()).post('/api/auth/otp/verify').send({ mobile, code: codes.get(mobile) }).expect(200);
+    tokens.set(mobile, res.body.accessToken);
     return res.body.accessToken as string;
   };
 
@@ -78,6 +81,30 @@ describe('Shop → distributor order flow', () => {
 
     // Shop sees it; cannot cancel a billed order
     await request(app.getHttpServer()).post(`/api/shop/orders/${order.id}/cancel`).set(auth).expect(409);
+  });
+
+  it('admin sees users, suspends one (login blocked), reactivates', async () => {
+    const admin = await login('9000000001');
+    const a = { Authorization: `Bearer ${admin}` };
+    const list = await request(app.getHttpServer()).get('/api/admin/users?q=Salma').set(a).expect(200);
+    const salma = list.body.find((u: any) => u.mobile === '9848012346');
+    expect(salma.role).toBe('RETAILER_STAFF');
+    expect(salma.business.name).toBe('Annapurna Medical & General Stores');
+
+    await request(app.getHttpServer()).post(`/api/admin/users/${salma.id}/status`).set(a).send({ status: 'SUSPENDED', reason: 'Left the shop' }).expect(201);
+    await request(app.getHttpServer()).post('/api/auth/otp/request').send({ mobile: '9848012346' }).expect(200);
+    await request(app.getHttpServer()).post('/api/auth/otp/verify').send({ mobile: '9848012346', code: codes.get('9848012346') }).expect(401);
+
+    const detail = await request(app.getHttpServer()).get(`/api/admin/users/${salma.id}`).set(a).expect(200);
+    expect(detail.body.activity.map((x: any) => x.action)).toEqual(expect.arrayContaining(['user.suspend', 'auth.login_blocked']));
+    expect(detail.body.canDo).toContain('Cannot place orders');
+
+    await request(app.getHttpServer()).post(`/api/admin/users/${salma.id}/status`).set(a).send({ status: 'ACTIVE', reason: 'Back at work' }).expect(201);
+    // A shop user cannot be made a distributor admin
+    await request(app.getHttpServer()).post(`/api/admin/users/${salma.id}/role`).set(a).send({ role: 'DISTRIBUTOR_ADMIN' }).expect(400);
+    // Non-admins cannot see the users list
+    const shop = await login('9848012345');
+    await request(app.getHttpServer()).get('/api/admin/users').set({ Authorization: `Bearer ${shop}` }).expect(403);
   });
 
   it('blocks other distributors from touching the order', async () => {

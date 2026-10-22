@@ -62,6 +62,8 @@ export class AuthService {
     const given = Buffer.from(this.hashOtp(mobile, code), 'hex');
     if (expected.length !== given.length || !timingSafeEqual(expected, given)) {
       await this.prisma.otpChallenge.update({ where: { id: challenge.id }, data: { attempts: { increment: 1 } } });
+      const who = await this.prisma.user.findUnique({ where: { mobile } });
+      await this.audit.log({ actorId: who?.id ?? null, actorLabel: who?.name ?? `+91 ${mobile}`, action: 'auth.otp_wrong', entity: 'User', entityId: who?.id ?? null });
       throw new UnauthorizedException('That OTP is not correct. Please check and try again.');
     }
     await this.prisma.otpChallenge.update({ where: { id: challenge.id }, data: { consumedAt: new Date() } });
@@ -71,7 +73,11 @@ export class AuthService {
       const registrationToken = this.jwt.sign({ mobile, purpose: 'register' }, { secret: config().JWT_ACCESS_SECRET, expiresIn: '30m' });
       return { registrationToken };
     }
-    if (user.status === 'SUSPENDED') throw new UnauthorizedException('This account is suspended. Please call support.');
+    if (user.status === 'SUSPENDED') {
+      await this.audit.log({ actorId: user.id, actorLabel: user.name, action: 'auth.login_blocked', entity: 'User', entityId: user.id });
+      throw new UnauthorizedException('This account is suspended. Please call support.');
+    }
+    await this.audit.log({ actorId: user.id, actorLabel: user.name, action: 'auth.login', entity: 'User', entityId: user.id, after: { device: deviceName ?? 'Web' } });
     return this.issueTokens(user, deviceName);
   }
 

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { BillingSoftware, KycStatus } from '@prisma/client';
+import { BillingSoftware, KycStatus, Role, UserStatus } from '@prisma/client';
 import { createHash, randomBytes } from 'crypto';
-import { validateGstin } from '@medilink/core';
+import { permissionsFor, validateGstin } from '@medilink/core';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../common/audit.service';
 import { NotifyService } from '../common/notify.service';
@@ -115,6 +115,102 @@ export class AdminService {
 
   async auditLog(take = 100) {
     return this.prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take });
+  }
+
+  // ------------------------------------------------------------ users & access
+
+  /** Everyone who can log in, with business, status, last login and active devices. */
+  async users(filter: { q?: string; role?: Role; status?: UserStatus }) {
+    const q = filter.q?.trim();
+    const rows = await this.prisma.user.findMany({
+      where: {
+        ...(filter.role ? { role: filter.role } : {}),
+        ...(filter.status ? { status: filter.status } : {}),
+        ...(q
+          ? {
+              OR: [
+                { name: { contains: q, mode: 'insensitive' } },
+                { mobile: { contains: q.replace(/\D/g, '') || q } },
+                { userCode: { contains: q, mode: 'insensitive' } },
+                { retailer: { name: { contains: q, mode: 'insensitive' } } },
+                { distributor: { name: { contains: q, mode: 'insensitive' } } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ role: 'asc' }, { name: 'asc' }],
+      take: 300,
+      include: {
+        retailer: { select: { name: true, area: true } },
+        distributor: { select: { name: true, area: true } },
+        sessions: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } },
+        _count: { select: { sessions: { where: { revokedAt: null, expiresAt: { gt: new Date() } } } } },
+      },
+    });
+    return rows.map((u) => ({
+      id: u.id,
+      userCode: u.userCode,
+      name: u.name,
+      mobile: u.mobile,
+      role: u.role,
+      status: u.status,
+      business: u.retailer ? { type: 'shop', ...u.retailer } : u.distributor ? { type: 'distributor', ...u.distributor } : null,
+      lastActiveAt: u.sessions[0]?.createdAt ?? null,
+      activeDevices: u._count.sessions,
+      createdAt: u.createdAt,
+    }));
+  }
+
+  /** One user's devices and recent activity (from the audit log). */
+  async userDetail(id: string) {
+    const u = await this.prisma.user.findUnique({ where: { id }, include: { retailer: true, distributor: true } });
+    if (!u) throw new NotFoundException('User not found');
+    const [sessions, activity] = await Promise.all([
+      this.prisma.session.findMany({ where: { userId: id, revokedAt: null, expiresAt: { gt: new Date() } }, orderBy: { createdAt: 'desc' }, select: { id: true, deviceName: true, createdAt: true, expiresAt: true } }),
+      this.prisma.auditLog.findMany({ where: { OR: [{ actorId: id }, { entity: 'User', entityId: id }] }, orderBy: { createdAt: 'desc' }, take: 40 }),
+    ]);
+    return {
+      user: { id: u.id, userCode: u.userCode, name: u.name, mobile: u.mobile, role: u.role, status: u.status, lang: u.lang, createdAt: u.createdAt, termsAcceptedAt: u.termsAcceptedAt },
+      business: u.retailer ? { type: 'shop', name: u.retailer.name, area: u.retailer.area, kycStatus: u.retailer.kycStatus } : u.distributor ? { type: 'distributor', name: u.distributor.name, area: u.distributor.area, kycStatus: u.distributor.kycStatus } : null,
+      canDo: permissionsFor(u.role),
+      devices: sessions,
+      activity,
+    };
+  }
+
+  async setUserStatus(admin: AuthUser, id: string, status: 'ACTIVE' | 'SUSPENDED', reason: string) {
+    if (id === admin.sub) throw new BadRequestException('You cannot suspend your own account');
+    const before = await this.prisma.user.findUnique({ where: { id } });
+    if (!before) throw new NotFoundException('User not found');
+    await this.prisma.user.update({ where: { id }, data: { status } });
+    if (status === 'SUSPENDED') await this.revokeSessions(id);
+    await this.audit.log({ actorId: admin.sub, actorLabel: admin.name, action: status === 'SUSPENDED' ? 'user.suspend' : 'user.activate', entity: 'User', entityId: id, before: { status: before.status }, after: { status, reason } });
+    return { id, status };
+  }
+
+  async logoutEverywhere(admin: AuthUser, id: string) {
+    const n = await this.revokeSessions(id);
+    await this.audit.log({ actorId: admin.sub, actorLabel: admin.name, action: 'user.logout_all', entity: 'User', entityId: id, after: { devices: n } });
+    return { devicesLoggedOut: n };
+  }
+
+  async setUserRole(admin: AuthUser, id: string, role: Role) {
+    const before = await this.prisma.user.findUnique({ where: { id } });
+    if (!before) throw new NotFoundException('User not found');
+    if (id === admin.sub) throw new BadRequestException('You cannot change your own role');
+    const shopRoles: Role[] = ['RETAILER_OWNER', 'RETAILER_STAFF'];
+    const distRoles: Role[] = ['DISTRIBUTOR_ADMIN', 'DISTRIBUTOR_STAFF'];
+    if (before.retailerId && !shopRoles.includes(role)) throw new BadRequestException('A shop user can only be shop owner or shop staff');
+    if (before.distributorId && !distRoles.includes(role)) throw new BadRequestException('A distributor user can only be distributor admin or staff');
+    if (!before.retailerId && !before.distributorId && (shopRoles.includes(role) || distRoles.includes(role))) throw new BadRequestException('This user is not linked to a shop or distributor');
+    await this.prisma.user.update({ where: { id }, data: { role } });
+    await this.audit.log({ actorId: admin.sub, actorLabel: admin.name, action: 'user.role', entity: 'User', entityId: id, before: { role: before.role }, after: { role } });
+    return { id, role };
+  }
+
+  private async revokeSessions(userId: string) {
+    const r = await this.prisma.session.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+    return r.count;
   }
 
   /** Distributor items we could not match to a master product automatically. */

@@ -22,7 +22,7 @@
     }
   },
   "postCreateCommand": "bash .devcontainer/setup.sh",
-  "postStartCommand": "docker compose -f infra/docker-compose.yml up -d postgres redis",
+  "postStartCommand": "docker compose -f infra/docker-compose.yml up -d postgres",
   "postAttachCommand": {
     "app": "pnpm dev"
   },

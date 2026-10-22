@@ -172,3 +172,13 @@ test('every language has every message', () => {
   assert.equal(c.t('te', 'cart'), 'కార్ట్');
   assert.equal(c.greetingKey(9), 'goodMorning');
 });
+
+/* ---------- roles ---------- */
+test('every role has a label and a plain-words access list', () => {
+  for (const r of c.ROLES) {
+    assert.ok(c.ROLE_LABEL[r], r);
+    assert.ok(c.permissionsFor(r).length > 0, r);
+  }
+  assert.deepEqual(c.assignableRoles('shop'), ['RETAILER_OWNER', 'RETAILER_STAFF']);
+  assert.deepEqual(c.permissionsFor('NOPE'), []);
+});
