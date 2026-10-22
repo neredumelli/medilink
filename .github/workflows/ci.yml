@@ -39,7 +39,8 @@ jobs:
         run: pnpm --filter @medilink/api prisma:deploy && pnpm --filter @medilink/api prisma:seed
       - name: API typecheck
         if: always()
-        run: pnpm --filter @medilink/api typecheck
+        shell: bash
+        run: pnpm --filter @medilink/api typecheck 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; grep -E "error|Error" /tmp/out.txt | head -40 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done; exit $code
       - name: API end-to-end test
         if: always()
         run: pnpm --filter @medilink/api test
@@ -48,13 +49,16 @@ jobs:
         run: pnpm --filter @medilink/api build
       - name: Web typecheck
         if: always()
-        run: pnpm --filter @medilink/web typecheck
+        shell: bash
+        run: pnpm --filter @medilink/web typecheck 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; grep -E "error|Error" /tmp/out.txt | head -40 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done; exit $code
       - name: Web build
         if: always()
-        run: pnpm --filter @medilink/web build
+        shell: bash
+        run: pnpm --filter @medilink/web build 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; grep -E "error|Error" /tmp/out.txt | head -40 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done; exit $code
       - name: Mobile typecheck
         if: always()
-        run: pnpm --filter @medilink/mobile typecheck
+        shell: bash
+        run: pnpm --filter @medilink/mobile typecheck 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; grep -E "error|Error" /tmp/out.txt | head -40 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done; exit $code
 
   mobile:
     # Builds Android (AAB) and iOS (IPA) in Expo's cloud on release tags.

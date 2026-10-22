@@ -28,7 +28,7 @@ export default function ShopHome() {
   const [results, setResults] = useState<Card[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [paste, setPaste] = useState(false);
-  const timer = useRef<number>();
+  const timer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     window.clearTimeout(timer.current);
