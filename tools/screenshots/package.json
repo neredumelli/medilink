@@ -1,0 +1,8 @@
+{
+  "name": "medilink-screenshots",
+  "private": true,
+  "type": "module",
+  "description": "Logs into the running app with demo data and captures every key screen.",
+  "scripts": { "shoot": "node shoot.mjs" },
+  "dependencies": { "playwright": "1.49.1" }
+}

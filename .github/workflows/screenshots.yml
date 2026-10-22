@@ -1,0 +1,61 @@
+name: Screenshots
+# Runs the real app with demo data and saves screenshots to docs/screenshots.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  shoot:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: medilink, POSTGRES_PASSWORD: medilink, POSTGRES_DB: medilink }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U medilink" --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://medilink:medilink@localhost:5432/medilink?schema=public
+      JWT_ACCESS_SECRET: screenshots-access
+      JWT_REFRESH_SECRET: screenshots-refresh
+      OTP_PROVIDER: console
+      NODE_ENV: development
+      NO_COLOR: "1"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: pnpm install --no-frozen-lockfile
+      - run: pnpm --filter @medilink/api prisma:deploy && pnpm --filter @medilink/api prisma:seed
+      - run: pnpm --filter @medilink/api build && pnpm --filter @medilink/web build
+      - name: Start API and web
+        run: |
+          (cd apps/api && nohup node dist/main.js > "$GITHUB_WORKSPACE/api.log" 2>&1 &)
+          (cd apps/web && nohup npx next start -p 3000 > "$GITHUB_WORKSPACE/web.log" 2>&1 &)
+          for i in $(seq 1 60); do curl -sf http://localhost:4000/api/health >/dev/null && curl -sf http://localhost:3000/login >/dev/null && break; sleep 2; done
+          curl -sf http://localhost:4000/api/health
+      - name: Capture
+        working-directory: tools/screenshots
+        shell: bash
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          API_LOG="$GITHUB_WORKSPACE/api.log" OUT_DIR="$GITHUB_WORKSPACE/docs/screenshots" node shoot.mjs 2>&1 | tee /tmp/shoot.txt
+          code=${PIPESTATUS[0]}
+          grep -E "STEP FAILED|Done:" /tmp/shoot.txt | while IFS= read -r l; do echo "::warning::$l"; done || true
+          exit $code
+      - name: Report server errors
+        if: failure()
+        run: grep -iE "error|exception" api.log web.log | head -30 | while IFS= read -r l; do echo "::error::$l"; done || true
+      - name: Save screenshots to the repository
+        run: |
+          git config user.name "medilink-bot"
+          git config user.email "medilink-bot@users.noreply.github.com"
+          git add docs/screenshots
+          git commit -m "Update UI screenshots [skip ci]" || echo "No changes"
+          git pull --rebase origin main
+          git push
