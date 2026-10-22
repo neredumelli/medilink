@@ -2,6 +2,7 @@ name: CI
 on:
   push: { branches: [main] }
   pull_request:
+  workflow_dispatch:
 
 jobs:
   build-test:
@@ -15,19 +16,45 @@ jobs:
           --health-cmd "pg_isready -U medilink" --health-interval 5s --health-retries 10
     env:
       DATABASE_URL: postgresql://medilink:medilink@localhost:5432/medilink?schema=public
-      JWT_ACCESS_SECRET: ci-access
-      JWT_REFRESH_SECRET: ci-refresh
+      JWT_ACCESS_SECRET: ci-access-secret
+      JWT_REFRESH_SECRET: ci-refresh-secret
       OTP_PROVIDER: console
+      NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: pnpm }
-      - run: pnpm install --frozen-lockfile=false
-      - run: pnpm --filter @medilink/api prisma:deploy
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
+        with: { node-version: 22 }
+      - name: Install
+        run: pnpm install --no-frozen-lockfile
+      # Every check below runs even if an earlier one failed, so one run shows all problems.
+      - name: Core tests
+        if: always()
+        run: pnpm --filter @medilink/core test
+      - name: Sync agent tests
+        if: always()
+        run: pnpm --filter @medilink/sync-agent test
+      - name: Database migrate + seed
+        if: always()
+        run: pnpm --filter @medilink/api prisma:deploy && pnpm --filter @medilink/api prisma:seed
+      - name: API typecheck
+        if: always()
+        run: pnpm --filter @medilink/api typecheck
+      - name: API end-to-end test
+        if: always()
+        run: pnpm --filter @medilink/api test
+      - name: API build
+        if: always()
+        run: pnpm --filter @medilink/api build
+      - name: Web typecheck
+        if: always()
+        run: pnpm --filter @medilink/web typecheck
+      - name: Web build
+        if: always()
+        run: pnpm --filter @medilink/web build
+      - name: Mobile typecheck
+        if: always()
+        run: pnpm --filter @medilink/mobile typecheck
 
   mobile:
     # Builds Android (AAB) and iOS (IPA) in Expo's cloud on release tags.
@@ -38,8 +65,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: pnpm }
+        with: { node-version: 22 }
       - uses: expo/expo-github-action@v8
         with: { eas-version: latest, token: "${{ secrets.EXPO_TOKEN }}" }
-      - run: pnpm install --frozen-lockfile=false
+      - run: pnpm install --no-frozen-lockfile
       - run: cd apps/mobile && eas build --platform all --profile production --non-interactive --no-wait
