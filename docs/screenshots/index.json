@@ -1,0 +1,102 @@
+[
+  {
+    "name": "01-login",
+    "title": "Login: mobile number, no password",
+    "file": "01-login.png"
+  },
+  {
+    "name": "02-otp",
+    "title": "Login: 6-digit OTP",
+    "file": "02-otp.png"
+  },
+  {
+    "name": "03-shop-home",
+    "title": "Shop home: greeting, today status, search, quick tiles, usual items",
+    "file": "03-shop-home.png"
+  },
+  {
+    "name": "04-search-best-price",
+    "title": "Search: best price after scheme, stock, delivery",
+    "file": "04-search-best-price.png"
+  },
+  {
+    "name": "05-compare-distributors",
+    "title": "Compare all linked distributors in one tap",
+    "file": "05-compare-distributors.png"
+  },
+  {
+    "name": "06-typo-search",
+    "title": "Spelling mistakes are fine (\"azithrl\")",
+    "file": "06-typo-search.png"
+  },
+  {
+    "name": "07-out-of-stock-substitute",
+    "title": "Out of stock everywhere: same-salt substitutes",
+    "file": "07-out-of-stock-substitute.png"
+  },
+  {
+    "name": "08-added-to-cart",
+    "title": "Added: confirmation and cart bar",
+    "file": "08-added-to-cart.png"
+  },
+  {
+    "name": "09-paste-whatsapp-list",
+    "title": "Paste a WhatsApp list: read and matched automatically",
+    "file": "09-paste-whatsapp-list.png"
+  },
+  {
+    "name": "10-cart-split-by-distributor",
+    "title": "Cart: split per distributor with credit check",
+    "file": "10-cart-split-by-distributor.png"
+  },
+  {
+    "name": "11-order-success",
+    "title": "Orders sent: success screen with time taken",
+    "file": "11-order-success.png"
+  },
+  {
+    "name": "12-order-tracking",
+    "title": "Order tracking, part supply and \"get the rest\"",
+    "file": "12-order-tracking.png"
+  },
+  {
+    "name": "13-shortage-list",
+    "title": "Shared shortage list: staff add, owner orders all",
+    "file": "13-shortage-list.png"
+  },
+  {
+    "name": "14-account-distributors",
+    "title": "Account: distributors, dues, credit, link requests",
+    "file": "14-account-distributors.png"
+  },
+  {
+    "name": "15-shop-home-telugu",
+    "title": "Same screen in Telugu (one tap)",
+    "file": "15-shop-home-telugu.png"
+  },
+  {
+    "name": "16-distributor-order-lanes",
+    "title": "Distributor: order lanes New → To bill → To dispatch → On the way",
+    "file": "16-distributor-order-lanes.png"
+  },
+  {
+    "name": "17-distributor-after-billing",
+    "title": "After accept + bill: order moves lanes, bill number created",
+    "file": "17-distributor-after-billing.png"
+  },
+  {
+    "name": "18-admin-overview",
+    "title": "Admin: KPIs, approvals with GSTIN check, sync health, activity",
+    "file": "18-admin-overview.png"
+  },
+  {
+    "name": "19-admin-users-access",
+    "title": "Users & access: role in plain words, devices, activity, suspend",
+    "file": "19-admin-users-access.png"
+  },
+  {
+    "name": "20-shop-sees-billed",
+    "title": "Shop sees the order billed by the distributor",
+    "file": "20-shop-sees-billed.png"
+  }
+]
