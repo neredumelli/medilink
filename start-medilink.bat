@@ -36,6 +36,23 @@ if !NODE_MAJOR! LSS 20 (
 echo [1/7] Node.js found:
 node -v
 
+REM ---------- 1b. Company network certificates ----------
+REM Office networks often inspect HTTPS with their own certificate. Windows trusts it, Node.js does not.
+REM We export the certificates Windows already trusts, so npm, pnpm and Prisma can download safely.
+set "CA_FILE=%~dp0.certs\windows-trusted-ca.pem"
+if /i "%~1"=="reset" if exist "%CA_FILE%" del "%CA_FILE%"
+if not exist "%CA_FILE%" (
+  echo [1/7] Reading trusted certificates from Windows...
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$sb = New-Object System.Text.StringBuilder; foreach ($store in 'Cert:\LocalMachine\Root','Cert:\LocalMachine\CA','Cert:\CurrentUser\Root','Cert:\CurrentUser\CA') { Get-ChildItem $store -ErrorAction SilentlyContinue | Where-Object { $_.NotAfter -gt (Get-Date) } | ForEach-Object { [void]$sb.AppendLine('-----BEGIN CERTIFICATE-----'); [void]$sb.AppendLine([Convert]::ToBase64String($_.RawData, 'InsertLineBreaks')); [void]$sb.AppendLine('-----END CERTIFICATE-----') } }; New-Item -ItemType Directory -Force -Path (Split-Path $env:CA_FILE) | Out-Null; [IO.File]::WriteAllText($env:CA_FILE, $sb.ToString())"
+)
+if exist "%CA_FILE%" (
+  set "NODE_EXTRA_CA_CERTS=%CA_FILE%"
+  set "npm_config_cafile=%CA_FILE%"
+  echo [1/7] Company certificates loaded.
+) else (
+  echo [1/7] Could not read Windows certificates. Downloads may fail on an office network.
+)
+
 REM ---------- 2. pnpm ----------
 where pnpm >nul 2>nul
 if errorlevel 1 (
@@ -146,6 +163,7 @@ goto :eof
 
 :fail
 echo.
-echo  Something went wrong. Copy the red text above and send it to Claude for a fix.
+echo  Something went wrong. Copy the text above and send it to Claude for a fix.
+echo  On an office network you may also need to ask IT to allow registry.npmjs.org, binaries.prisma.sh and Docker Hub.
 pause
 exit /b 1

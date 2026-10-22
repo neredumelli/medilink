@@ -10,3 +10,5 @@ coverage
 apps/sync-agent/state.json
 apps/sync-agent/inbox/*.csv
 !apps/sync-agent/inbox/.gitkeep
+.certs
+.seeded
