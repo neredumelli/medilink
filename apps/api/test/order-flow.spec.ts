@@ -107,6 +107,53 @@ describe('Shop → distributor order flow', () => {
     await request(app.getHttpServer()).get('/api/admin/users').set({ Authorization: `Bearer ${shop}` }).expect(403);
   });
 
+  it('a double tap or retry with the same key never creates a second order', async () => {
+    const shop = await login('9848012345');
+    const auth = { Authorization: `Bearer ${shop}` };
+    const search = await request(app.getHttpServer()).get('/api/catalog/search?q=okacet').set(auth).expect(200);
+    await request(app.getHttpServer()).put(`/api/shop/cart/${search.body[0].product.id}`).set(auth).send({ qty: 10 }).expect(200);
+    const key = 'retry-test-key-0001';
+    const first = await request(app.getHttpServer()).post('/api/shop/orders').set(auth).set('Idempotency-Key', key).send({}).expect(201);
+    const again = await request(app.getHttpServer()).post('/api/shop/orders').set(auth).set('Idempotency-Key', key).send({}).expect(201);
+    expect(again.body.orders.map((o: any) => o.number)).toEqual(first.body.orders.map((o: any) => o.number));
+    // Without the same key, an empty cart is refused (no phantom order)
+    const empty = await request(app.getHttpServer()).post('/api/shop/orders').set(auth).set('Idempotency-Key', 'another-key-0002').send({}).expect(400);
+    expect(empty.body.message).toBe('Your cart is empty');
+    expect(empty.body.ref).toMatch(/^ML-[A-Z2-9]{5}$/);
+  });
+
+  it('every error carries a reference code and no technical details', async () => {
+    const shop = await login('9848012345');
+    const res = await request(app.getHttpServer()).get('/api/catalog/products/3f2b1c4d-8e9a-4b7c-9d1e-2a3b4c5d6e7f').set({ Authorization: `Bearer ${shop}` }).expect(404);
+    expect(res.body).toEqual({ statusCode: 404, message: 'Medicine not found', ref: expect.stringMatching(/^ML-/) });
+    expect(res.headers['x-request-ref']).toBe(res.body.ref);
+  });
+
+  it('maintenance mode shows a friendly message to shops but lets admins work', async () => {
+    const admin = await login('9000000001');
+    const shop = await login('9848012345');
+    const a = { Authorization: `Bearer ${admin}` };
+    const until = new Date(Date.now() + 3600_000).toISOString();
+    await request(app.getHttpServer()).post('/api/admin/settings').set(a).send({ maintenance: { on: true, message: 'Upgrading tonight', until } }).expect(201);
+    try {
+      const blocked = await request(app.getHttpServer()).get('/api/shop/home').set({ Authorization: `Bearer ${shop}` }).expect(503);
+      expect(blocked.body).toMatchObject({ maintenance: true, message: 'Upgrading tonight', until });
+      await request(app.getHttpServer()).get('/api/admin/overview').set(a).expect(200);
+      const status = await request(app.getHttpServer()).get('/api/public/status').expect(200);
+      expect(status.body).toMatchObject({ ok: false, maintenance: { on: true } });
+    } finally {
+      await request(app.getHttpServer()).post('/api/admin/settings').set(a).send({ maintenance: { on: false, message: '', until: null } }).expect(201);
+    }
+    await request(app.getHttpServer()).get('/api/shop/home').set({ Authorization: `Bearer ${shop}` }).expect(200);
+  });
+
+  it('old phone apps are asked to update', async () => {
+    const shop = await login('9848012345');
+    const res = await request(app.getHttpServer()).get('/api/shop/home').set({ Authorization: `Bearer ${shop}`, 'X-App-Version': '0.0.1' }).expect(426);
+    expect(res.body).toMatchObject({ updateRequired: true, minAppVersion: '0.1.0' });
+    await request(app.getHttpServer()).get('/api/shop/home').set({ Authorization: `Bearer ${shop}`, 'X-App-Version': '0.1.0' }).expect(200);
+  });
+
   it('blocks other distributors from touching the order', async () => {
     const shop = await login('9848012345');
     const list = await request(app.getHttpServer()).get('/api/shop/orders').set({ Authorization: `Bearer ${shop}` }).expect(200);

@@ -1,5 +1,5 @@
-import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PrismaService } from './prisma.service';
@@ -22,10 +22,15 @@ import { AgentGuard } from './sync/agent.guard';
 import { AdminController } from './admin/admin.controller';
 import { AdminService } from './admin/admin.service';
 import { HealthController } from './health.controller';
+import { PublicController } from './public.controller';
+import { SettingsService } from './common/settings.service';
+import { AccessPolicyGuard } from './common/access-policy.guard';
+import { AllErrorsFilter } from './common/error.filter';
+import { RequestRefMiddleware } from './common/request-ref';
 
 @Module({
   imports: [JwtModule.register({}), ThrottlerModule.forRoot({ throttlers: [{ ttl: 60_000, limit: 300 }], skipIf: () => process.env.NODE_ENV === 'test' })],
-  controllers: [HealthController, AuthController, CatalogController, ShopController, DistributorController, SyncController, AdminController],
+  controllers: [HealthController, PublicController, AuthController, CatalogController, ShopController, DistributorController, SyncController, AdminController],
   providers: [
     PrismaService,
     AuditService,
@@ -39,10 +44,19 @@ import { HealthController } from './health.controller';
     SyncService,
     AgentGuard,
     AdminService,
+    SettingsService,
     // Order matters: rate limit, then authentication, then role checks.
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // Maintenance mode and minimum app version, after we know who the user is.
+    { provide: APP_GUARD, useClass: AccessPolicyGuard },
+    // Every error leaves in one friendly shape with a reference code.
+    { provide: APP_FILTER, useClass: AllErrorsFilter },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestRefMiddleware).forRoutes('*');
+  }
+}

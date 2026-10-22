@@ -451,3 +451,26 @@ model Notification {
 
   @@index([sentAt])
 }
+
+// ---------------------------------------------------------------- settings & safety
+/// Admin-editable settings (maintenance mode, minimum app version, …). Value is JSON so new settings need no migration.
+model AppSetting {
+  key         String   @id
+  value       Json
+  updatedById String?  @db.Uuid
+  updatedAt   DateTime @updatedAt
+}
+
+/// Remembers the result of "place order" (and later payments) per request key, so a double tap or a retry
+/// returns the first result instead of creating a second order.
+model IdempotencyKey {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  key       String   @db.VarChar(64)
+  route     String
+  response  Json
+  createdAt DateTime @default(now())
+
+  @@unique([userId, key])
+  @@index([createdAt])
+}

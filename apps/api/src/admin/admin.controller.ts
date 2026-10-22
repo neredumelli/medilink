@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { ADMIN_ROLES, AuthUser, CurrentUser, Roles } from '../common/auth';
 import { ZodPipe } from '../common/zod.pipe';
 import { AdminService } from './admin.service';
+import { SettingsService } from '../common/settings.service';
 
 const Decide = z.object({ decision: z.enum(['approve', 'changes', 'reject']), note: z.string().trim().max(300).optional() });
 const AgentKey = z.object({ software: z.enum(['MARG', 'TALLY', 'BUSY', 'GOFRUGAL', 'CSV', 'API']) });
@@ -12,13 +13,38 @@ const ROLE = z.enum(['SUPER_ADMIN', 'ADMIN_OPS', 'SUPPORT', 'CALL_CENTER', 'DIST
 const UserFilter = z.object({ q: z.string().max(60).optional(), role: ROLE.optional(), status: z.enum(['PENDING', 'ACTIVE', 'SUSPENDED']).optional() });
 const SetStatus = z.object({ status: z.enum(['ACTIVE', 'SUSPENDED']), reason: z.string().trim().min(3, 'Give a short reason').max(200) });
 const SetRole = z.object({ role: ROLE });
+const UpdateSettings = z.object({
+  maintenance: z
+    .object({
+      on: z.boolean(),
+      message: z.string().trim().max(300).default(''),
+      until: z.string().datetime({ offset: true }).nullable().default(null),
+    })
+    .optional(),
+  minAppVersion: z.string().regex(/^\d+(\.\d+){0,2}$/, 'Use a version like 1.2.0').optional(),
+});
 
 @ApiTags('admin')
 @ApiBearerAuth()
 @Roles(...ADMIN_ROLES)
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly admin: AdminService) {}
+  constructor(
+    private readonly admin: AdminService,
+    private readonly settings: SettingsService,
+  ) {}
+
+  // ---------------- settings (maintenance mode, minimum app version)
+  @Get('settings')
+  getSettings() {
+    return this.settings.get();
+  }
+
+  @Roles('SUPER_ADMIN', 'ADMIN_OPS')
+  @Post('settings')
+  updateSettings(@CurrentUser() u: AuthUser, @Body(new ZodPipe(UpdateSettings)) b: z.infer<typeof UpdateSettings>) {
+    return this.settings.update(u, b);
+  }
 
   @Get('overview')
   overview() {

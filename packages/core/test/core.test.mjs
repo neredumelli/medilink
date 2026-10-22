@@ -182,3 +182,9 @@ test('every role has a label and a plain-words access list', () => {
   assert.deepEqual(c.assignableRoles('shop'), ['RETAILER_OWNER', 'RETAILER_STAFF']);
   assert.deepEqual(c.permissionsFor('NOPE'), []);
 });
+
+test('compareVersions orders app versions numerically', () => {
+  assert.equal(c.compareVersions('1.2.10', '1.2.9'), 1);
+  assert.equal(c.compareVersions('0.1.0', '0.1'), 0);
+  assert.equal(c.compareVersions('0.9.9', '1.0.0'), -1);
+});

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Headers, Param, ParseUUIDPipe, Post, Put } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { AuthUser, CurrentUser, RETAILER_ROLES, requireRetailer, Roles } from '../common/auth';
@@ -74,8 +74,9 @@ export class ShopController {
 
   // orders
   @Post('orders')
-  place(@CurrentUser() u: AuthUser, @Body(new ZodPipe(Place)) b: z.infer<typeof Place>) {
-    return this.shop.placeOrders(u, requireRetailer(u), b);
+  place(@CurrentUser() u: AuthUser, @Body(new ZodPipe(Place)) b: z.infer<typeof Place>, @Headers('idempotency-key') key?: string) {
+    if (key !== undefined && !/^[A-Za-z0-9-]{8,64}$/.test(key)) throw new BadRequestException('Invalid request key');
+    return this.shop.placeOrders(u, requireRetailer(u), b, key);
   }
 
   @Get('orders')

@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { OrderSource } from '@prisma/client';
+import { OrderSource, Prisma } from '@prisma/client';
 import { billedRate, freeQty, orderTotals, parseOrderList, pickBest } from '@medilink/core';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../common/audit.service';
@@ -7,6 +7,12 @@ import { NotifyService } from '../common/notify.service';
 import { AuthUser } from '../common/auth';
 import { CatalogService } from '../catalog/catalog.service';
 import { OrderWorkflowService } from '../orders/order-workflow.service';
+
+export interface PlaceResult {
+  orders: { id: string; number: string; distributorName: string; totalPaise: number }[];
+  totalPaise: number;
+  timeToPlaceSec: number | null;
+}
 
 @Injectable()
 export class ShopService {
@@ -211,13 +217,23 @@ export class ShopService {
    * Turns the cart into one order per distributor.
    * Re-checks link status and credit under a row lock so two phones in the same shop cannot overspend.
    */
-  async placeOrders(user: AuthUser, retailerId: string, input: { timeToPlaceSec?: number; source: OrderSource }) {
+  async placeOrders(user: AuthUser, retailerId: string, input: { timeToPlaceSec?: number; source: OrderSource }, idempotencyKey?: string) {
+    // Duplicate protection: the same key (double tap, network retry) returns the first result.
+    if (idempotencyKey) {
+      const seen = await this.prisma.idempotencyKey.findUnique({ where: { userId_key: { userId: user.sub, key: idempotencyKey } } });
+      if (seen) return seen.response as unknown as PlaceResult;
+    }
     const retailer = await this.prisma.retailer.findUniqueOrThrow({ where: { id: retailerId } });
     if (retailer.kycStatus !== 'APPROVED') throw new ForbiddenException('Your shop documents are still being checked. You can order as soon as they are approved.');
     if (user.role === 'RETAILER_STAFF') throw new ForbiddenException('Only the shop owner can place orders. Add items to the shortage list instead.');
 
-    const created = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "RetailerDistributorLink" WHERE "retailerId" = ${retailerId}::uuid FOR UPDATE`;
+      // Checked again under the lock: a second identical request waits here, then gets the first result.
+      if (idempotencyKey) {
+        const seen = await tx.idempotencyKey.findUnique({ where: { userId_key: { userId: user.sub, key: idempotencyKey } } });
+        if (seen) return seen.response as unknown as PlaceResult;
+      }
       const cart = await tx.cartItem.findMany({ where: { retailerId }, include: { product: true } });
       if (cart.length === 0) throw new BadRequestException('Your cart is empty');
 
@@ -275,10 +291,13 @@ export class ShopService {
         });
       }
       await tx.cartItem.deleteMany({ where: { retailerId } });
-      return orders;
+      const placed: PlaceResult = { orders, totalPaise: orders.reduce((a, o) => a + o.totalPaise, 0), timeToPlaceSec: input.timeToPlaceSec ?? null };
+      if (idempotencyKey) {
+        await tx.idempotencyKey.create({ data: { userId: user.sub, key: idempotencyKey, route: 'shop.placeOrders', response: placed as unknown as Prisma.InputJsonValue } });
+      }
+      return placed;
     });
-
-    return { orders: created, totalPaise: created.reduce((a, o) => a + o.totalPaise, 0), timeToPlaceSec: input.timeToPlaceSec ?? null };
+    return result;
   }
 
   async orders(retailerId: string, take = 30) {
