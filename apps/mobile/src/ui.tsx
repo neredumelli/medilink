@@ -86,7 +86,8 @@ export interface Offer {
   shortExpiry: boolean;
 }
 export interface Card {
-  product: { id: string; name: string; form: string; pack: string; salt: string; company: string; schedule: string; category: string; mrpPaise: number };
+  product: { id: string; name: string; form: string; pack: string; salt: string; company: string; schedule: string; category: string; mrpPaise: number; status?: string; statusNote?: string | null };
+  blocked?: string | null;
   usualQty: number;
   offers: Offer[];
   best: { distributorId: string; overCredit: boolean } | null;
@@ -120,6 +121,24 @@ export function ProductCard({ card, onSearch }: { card: Card; onSearch: (q: stri
       </View>
     </View>
   );
+
+  if (card.blocked) {
+    const label = p.status === 'BANNED' ? tr('statusBanned') : p.status === 'RECALLED' ? tr('statusRecalled') : tr('statusDiscontinued');
+    return (
+      <CardBox>
+        {head}
+        <View style={[s.note, { backgroundColor: t.coralSoft }]} accessibilityLabel={`${p.name}: ${tr('cannotOrder')}`}>
+          <Pill label={label} tone="coral" />
+          <Text style={{ color: t.coral, fontFamily: fonts.bodyBold }}>{tr('cannotOrder')}</Text>
+          {p.statusNote ? <Text style={{ color: t.ink, fontFamily: fonts.body }}>{p.statusNote}</Text> : null}
+          {card.substitutes.length > 0 && <Muted>{tr('sameMedicine')}:</Muted>}
+          {card.substitutes.map((x) => (
+            <Btn key={x.id} small kind="plain" label={`${x.name} · ${x.company} · ${inr(x.fromNetRatePaise)}`} onPress={() => onSearch(x.name)} />
+          ))}
+        </View>
+      </CardBox>
+    );
+  }
 
   if (!card.best) {
     return (

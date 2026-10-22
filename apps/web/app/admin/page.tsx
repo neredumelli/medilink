@@ -48,6 +48,16 @@ interface OrderRow {
   totalPaise: number;
   createdAt: string;
 }
+interface LicenceAlert {
+  type: 'shop' | 'distributor';
+  id: string;
+  name: string;
+  area: string;
+  state: 'expired' | 'expiring';
+  expiresOn: string;
+  daysLeft: number;
+  which: string;
+}
 interface Audit {
   id: string;
   actorLabel: string;
@@ -57,7 +67,8 @@ interface Audit {
 }
 
 export default function AdminPage() {
-  const { toast } = useSession();
+  const { me, toast } = useSession();
+  const [licences, setLicences] = useState<LicenceAlert[]>([]);
   const [ov, setOv] = useState<Overview | null>(null);
   const [kyc, setKyc] = useState<Kyc[]>([]);
   const [health, setHealth] = useState<Health[]>([]);
@@ -65,13 +76,15 @@ export default function AdminPage() {
   const [audit, setAudit] = useState<Audit[]>([]);
 
   const load = useCallback(async () => {
-    const [o, k, h, or, a] = await Promise.all([
+    const [o, k, h, or, a, l] = await Promise.all([
       api<Overview>('/admin/overview'),
       api<Kyc[]>('/admin/kyc'),
       api<Health[]>('/admin/sync-health'),
       api<OrderRow[]>('/admin/orders'),
       api<Audit[]>('/admin/audit'),
+      api<LicenceAlert[]>('/admin/licences'),
     ]);
+    setLicences(l);
     setOv(o);
     setKyc(k);
     setHealth(h);
@@ -237,6 +250,14 @@ export default function AdminPage() {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
           <section className="panel">
+            <h2>Licences due</h2>
+            <div className="hint">Shops with an expired drug licence cannot order. Record the renewal here when they send it.</div>
+            {licences.length === 0 && <p className="hint">All licences are valid for more than 30 days.</p>}
+            {licences.map((l) => (
+              <LicenceRow key={`${l.type}-${l.id}`} l={l} canEdit={me?.role === 'SUPER_ADMIN' || me?.role === 'ADMIN_OPS'} onSaved={load} />
+            ))}
+          </section>
+          <section className="panel">
             <h2>How fast shops order</h2>
             <div className="hint">Seconds from first item added to order placed. Dashed line is the 30-second goal.</div>
             <div className="bars" role="img" aria-label="Order times in seconds">
@@ -292,5 +313,46 @@ export default function AdminPage() {
         </div>
       </div>
     </ConsoleShell>
+  );
+}
+
+function LicenceRow({ l, canEdit, onSaved }: { l: LicenceAlert; canEdit: boolean; onSaved: () => Promise<void> }) {
+  const { toast } = useSession();
+  const [date, setDate] = useState('');
+  const day = new Date(`${l.expiresOn}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  async function save() {
+    try {
+      const body = l.type === 'shop' ? { dl20bExpiry: date, dl21bExpiry: date } : { drugLicenceExpiry: date };
+      await api(`/admin/licences/${l.type}/${l.id}`, { body });
+      toast(`${l.name}: licence valid until ${date}`);
+      setDate('');
+      await onSaved();
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Could not save');
+    }
+  }
+  return (
+    <div className="box" style={{ gap: 6 }}>
+      <div className="row-b">
+        <div>
+          <b>{l.name}</b>
+          <div className="hint">
+            {l.type === 'shop' ? 'Shop' : 'Distributor'} · {l.area} · {l.which} licence
+          </div>
+        </div>
+        <span className={`pill ${l.state === 'expired' ? 'c-coral' : 'c-sun'}`}>{l.state === 'expired' ? `Expired ${day}` : `${day} · ${l.daysLeft} days`}</span>
+      </div>
+      {canEdit && (
+        <div className="frow">
+          <div className="field">
+            <label htmlFor={`lic-${l.id}`}>Renewed until</label>
+            <input id={`lic-${l.id}`} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+          <button className="btn small primary" disabled={!date} onClick={save}>
+            Save renewal
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

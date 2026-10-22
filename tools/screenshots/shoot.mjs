@@ -212,6 +212,55 @@ await step('page not found', async () => {
   await shot(shop, '23-page-not-found', 'Old or mistyped link: friendly page with a way home', { wait: 500 });
 });
 
+// ---------------- Flexible data ----------------
+await step('search by Telugu name', async () => {
+  await shop.goto(`${BASE}/shop`);
+  await shop.waitForSelector('#q');
+  await shop.fill('#q', 'డోలో');
+  await shop.waitForSelector('.bestbox', { timeout: 15000 });
+  await shot(shop, '24-search-telugu-name', 'Search by the name shops use: "డోలో" finds Dolo 650', { wait: 900 });
+});
+await step('admin medicine detail', async () => {
+  await adm.goto(`${BASE}/admin/products`);
+  await adm.waitForSelector('table tbody tr', { timeout: 15000 });
+  await adm.locator('table tbody tr').filter({ hasText: 'Dolo 650' }).first().click();
+  await adm.waitForSelector('.audit', { timeout: 15000 });
+  await shot(adm, '25-admin-medicine', 'Medicines: other names, several barcodes, extra details, batches and change history', { fullPage: true, wait: 1000 });
+});
+await step('admin recalls a medicine', async () => {
+  await adm.locator('table tbody tr').filter({ hasText: 'Pan 40' }).first().click();
+  await adm.getByText('Pantoprazole 40 mg · Alkem').first().waitFor({ timeout: 15000 });
+  await adm.selectOption('#pst', 'RECALLED');
+  await adm.fill('#pnote', 'Demo only: recall notice R-2026-14, batches PN-11 to PN-19.');
+  await adm.getByRole('button', { name: /save status/i }).click();
+  await adm.getByText(/Blocked since/).waitFor({ timeout: 15000 });
+  await shot(adm, '26-admin-recall', 'Recall or ban a medicine: shops are blocked at once and see your note', { fullPage: true, wait: 800 });
+});
+await step('shop sees recalled', async () => {
+  await shop.fill('#q', '');
+  await shop.fill('#q', 'pan 40');
+  await shop.getByText(/cannot be ordered/i).first().waitFor({ timeout: 15000 });
+  await shot(shop, '27-shop-sees-recall', 'Shop sees why it cannot be ordered, with same-salt alternatives', { wait: 900 });
+});
+await step('admin restores', async () => {
+  await adm.selectOption('#pst', 'ACTIVE');
+  await adm.getByRole('button', { name: /save status/i }).click();
+  await adm.waitForTimeout(1500);
+});
+await step('data fields', async () => {
+  await adm.goto(`${BASE}/admin/fields`);
+  await adm.waitForSelector('table tbody tr', { timeout: 15000 });
+  await adm.fill('#fl', 'Cold chain needed');
+  await adm.selectOption('#ft', 'YESNO');
+  await shot(adm, '28-admin-data-fields', 'Data fields: add your own fields to medicines, shops and distributors', { fullPage: true, wait: 600 });
+});
+await step('licence warning', async () => {
+  const sai = await phone.newPage();
+  await login(sai, '9848022222');
+  await sai.getByText(/expires soon/i).first().waitFor({ timeout: 15000 });
+  await shot(sai, '29-shop-licence-warning', 'Licence expiring in 20 days: the shop is warned before ordering stops', { wait: 900 });
+});
+
 fs.writeFileSync(path.join(OUT, 'index.json'), JSON.stringify(results, null, 2));
 await browser.close();
 console.log(`Done: ${results.length} screenshots`);

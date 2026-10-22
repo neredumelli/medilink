@@ -66,6 +66,18 @@ const en = {
   allOrders: "All orders",
   items: "items",
   noOrdersYet: "No past orders yet",
+  licenceExpiredTitle: "Your drug licence has expired",
+  licenceExpiredBody: "Ordering is paused. Send the renewed licence to MediLink support and ordering opens again.",
+  licenceExpiringTitle: "Your drug licence expires soon",
+  licenceExpiringBody: "Renew it before this date so ordering does not stop.",
+  expiresOn: "Expires on",
+  expiredOn: "Expired on",
+  daysLeft: "days left",
+  cannotOrder: "Cannot be ordered",
+  statusBanned: "Banned by the government",
+  statusRecalled: "Recalled",
+  statusDiscontinued: "Discontinued by the company",
+  removeFromCart: "Remove from cart",
 };
 export type MessageKey = keyof typeof en;
 
@@ -134,6 +146,18 @@ const te: Record<MessageKey, string> = {
   allOrders: "అన్ని ఆర్డర్లు",
   items: "అంశాలు",
   noOrdersYet: "ఇంకా ఆర్డర్లు లేవు",
+  licenceExpiredTitle: "మీ డ్రగ్ లైసెన్స్ గడువు ముగిసింది",
+  licenceExpiredBody: "ఆర్డర్లు ఆపివేయబడ్డాయి. పునరుద్ధరించిన లైసెన్స్‌ను MediLink సపోర్ట్‌కు పంపండి, ఆర్డర్లు మళ్ళీ మొదలవుతాయి.",
+  licenceExpiringTitle: "మీ డ్రగ్ లైసెన్స్ త్వరలో ముగుస్తుంది",
+  licenceExpiringBody: "ఆర్డర్లు ఆగకుండా ఉండాలంటే ఈ తేదీలోపు పునరుద్ధరించండి.",
+  expiresOn: "గడువు తేదీ",
+  expiredOn: "గడువు ముగిసిన తేదీ",
+  daysLeft: "రోజులు మిగిలి ఉన్నాయి",
+  cannotOrder: "ఆర్డర్ చేయలేరు",
+  statusBanned: "ప్రభుత్వం నిషేధించింది",
+  statusRecalled: "వెనక్కి తీసుకోబడింది",
+  statusDiscontinued: "కంపెనీ తయారీ ఆపేసింది",
+  removeFromCart: "కార్ట్ నుండి తీసివేయండి",
 };
 
 const hi: Record<MessageKey, string> = {
@@ -201,6 +225,18 @@ const hi: Record<MessageKey, string> = {
   allOrders: "सभी ऑर्डर",
   items: "आइटम",
   noOrdersYet: "अभी कोई ऑर्डर नहीं",
+  licenceExpiredTitle: "आपका ड्रग लाइसेंस समाप्त हो गया है",
+  licenceExpiredBody: "ऑर्डर रुके हुए हैं। नवीनीकृत लाइसेंस MediLink सपोर्ट को भेजें, ऑर्डर फिर शुरू हो जाएंगे।",
+  licenceExpiringTitle: "आपका ड्रग लाइसेंस जल्द समाप्त होगा",
+  licenceExpiringBody: "ऑर्डर न रुकें, इसलिए इस तारीख से पहले नवीनीकरण करा लें।",
+  expiresOn: "समाप्ति तिथि",
+  expiredOn: "समाप्त हुआ",
+  daysLeft: "दिन बाकी",
+  cannotOrder: "ऑर्डर नहीं हो सकता",
+  statusBanned: "सरकार द्वारा प्रतिबंधित",
+  statusRecalled: "वापस मंगाई गई",
+  statusDiscontinued: "कंपनी ने बंद कर दी",
+  removeFromCart: "कार्ट से हटाएं",
 };
 
 export const MESSAGES: Record<Lang, Record<MessageKey, string>> = { en, te, hi };

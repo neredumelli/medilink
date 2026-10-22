@@ -22,6 +22,8 @@ interface Line {
   stockQty: number;
   shortExpiry: boolean;
   unavailable: boolean;
+  /** banned / recalled / discontinued since it was added */
+  blocked?: string | null;
   alternatives: { distributorId: string; name: string; netRatePaise: number }[];
 }
 interface Group {
@@ -132,8 +134,16 @@ export default function CartPage() {
                       {l.qty}
                       {l.freeQty > 0 && <b style={{ color: 'var(--violet)' }}> + {l.freeQty} free</b>} × {inr(l.ratePaise)}
                       {l.shortExpiry && <span style={{ color: 'var(--sun-ink)' }}> · short expiry</span>}
-                      {l.stockQty < l.qty && <span style={{ color: 'var(--bad)' }}> · only {l.stockQty} in stock</span>}
+                      {!l.blocked && l.stockQty < l.qty && <span style={{ color: 'var(--bad)' }}> · only {l.stockQty} in stock</span>}
                     </div>
+                    {l.blocked && (
+                      <div className="hint" role="alert" style={{ color: 'var(--bad)', fontWeight: 700 }}>
+                        {t('cannotOrder')}: {l.blocked}{' '}
+                        <button className="linkbtn" onClick={() => remove(l.productId)}>
+                          {t('removeFromCart')}
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <b>{inr0(l.valuePaise)}</b>
                   <div className="ctrl">

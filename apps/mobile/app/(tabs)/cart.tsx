@@ -17,7 +17,7 @@ interface Cart {
     overCredit: boolean;
     overByPaise: number;
     totals: { total: number };
-    lines: { productId: string; name: string; pack: string; category: string; qty: number; freeQty: number; ratePaise: number; valuePaise: number; stockQty: number; shortExpiry: boolean }[];
+    lines: { productId: string; name: string; pack: string; category: string; qty: number; freeQty: number; ratePaise: number; valuePaise: number; stockQty: number; shortExpiry: boolean; blocked?: string | null }[];
   }[];
   totals: { subtotal: number; gst: number; total: number };
   itemCount: number;
@@ -107,8 +107,13 @@ export default function CartScreen() {
                   {l.qty}
                   {l.freeQty ? ` + ${l.freeQty} free` : ''} × {inr(l.ratePaise)}
                   {l.shortExpiry ? ' · short expiry' : ''}
-                  {l.stockQty < l.qty ? ` · only ${l.stockQty} in stock` : ''}
+                  {!l.blocked && l.stockQty < l.qty ? ` · only ${l.stockQty} in stock` : ''}
                 </Muted>
+                {l.blocked ? (
+                  <Text style={{ color: t.bad, fontFamily: fonts.bodyBold }} accessibilityRole="alert">
+                    {tr('cannotOrder')}: {l.blocked}
+                  </Text>
+                ) : null}
               </View>
               <View style={{ alignItems: 'flex-end', gap: 4 }}>
                 <Text style={{ fontFamily: fonts.bodyBold, color: t.ink }}>{inr0(l.valuePaise)}</Text>

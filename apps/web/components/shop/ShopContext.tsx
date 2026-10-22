@@ -4,7 +4,13 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useState 
 import { api } from '@/lib/api';
 
 export interface HomeData {
-  shop: { name: string; area: string; kycStatus: string; canOrder: boolean };
+  shop: {
+    name: string;
+    area: string;
+    kycStatus: string;
+    canOrder: boolean;
+    licence?: { state: 'ok' | 'expiring' | 'expired' | 'missing'; expiresOn: string | null; daysLeft: number | null; which: string | null };
+  };
   chips: { onTheWay: number; creditFreePaise: number; shortageCount: number };
   usual: { productId: string; name: string; category: string; usualQty: number }[];
   lastDelivered: { id: string; number: string; distributor: string; createdAt: string; items: { productId: string; name: string; qty: number }[] } | null;

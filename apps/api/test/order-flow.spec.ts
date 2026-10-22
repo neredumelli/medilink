@@ -277,7 +277,7 @@ describe('Shop → distributor order flow', () => {
     const admin = { Authorization: `Bearer ${await login('9000000001')}` };
     const SKP = '3b27d4bb-05c1-5e54-9d98-46babf13c18c';
     const { body } = await request(app.getHttpServer()).post(`/api/admin/distributors/${SKP}/agent-key`).set(admin).send({ software: 'CSV' }).expect(201);
-    const push = async (items: unknown[]) => {
+    const push = (items: unknown[]) => {
       const raw = JSON.stringify({ items });
       const ts = String(Date.now());
       return request(app.getHttpServer())

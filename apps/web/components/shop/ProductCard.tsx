@@ -23,7 +23,9 @@ export interface Offer {
   shortExpiry: boolean;
 }
 export interface Card {
-  product: { id: string; name: string; form: string; pack: string; salt: string; company: string; schedule: string; category: string; mrpPaise: number };
+  product: { id: string; name: string; form: string; pack: string; salt: string; company: string; schedule: string; category: string; mrpPaise: number; status?: string; statusNote?: string | null };
+  /** Why it cannot be ordered (banned, recalled, discontinued). */
+  blocked?: string | null;
   usualQty: number;
   offers: Offer[];
   best: { distributorId: string; netRatePaise: number; partial: boolean; overCredit: boolean } | null;
@@ -74,6 +76,36 @@ export function ProductCard({ card, onSearch }: { card: Card; onSearch: (q: stri
       </div>
     </div>
   );
+
+  if (card.blocked) {
+    const label = p.status === 'BANNED' ? t('statusBanned') : p.status === 'RECALLED' ? t('statusRecalled') : t('statusDiscontinued');
+    return (
+      <article className="card" aria-label={`${p.name}: ${t('cannotOrder')}`}>
+        {head}
+        <div className="note c-coral">
+          <span className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <span className="pill c-coral">
+              <Icon name="x" /> {label}
+            </span>
+            <b>{t('cannotOrder')}</b>
+          </span>
+          {p.statusNote && <span>{p.statusNote}</span>}
+          {card.substitutes.length > 0 && (
+            <>
+              <span>{t('sameMedicine')}:</span>
+              <div className="subs">
+                {card.substitutes.map((s) => (
+                  <button key={s.id} onClick={() => onSearch(s.name)}>
+                    {s.name} · {s.company} · {inr(s.fromNetRatePaise)}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </article>
+    );
+  }
 
   if (!card.best) {
     return (

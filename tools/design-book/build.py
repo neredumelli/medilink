@@ -9,9 +9,9 @@ FLOWS = ROOT / 'docs' / 'functional-flows.md'
 OUT = ROOT / 'docs' / 'design-book.html'
 
 GROUPS = [
-    ('Shop app (phone)', 'For medical shop owners and staff. Same screens on Android, iPhone and web.', [f'{i:02d}' for i in range(1, 16)] + ['20']),
+    ('Shop app (phone)', 'For medical shop owners and staff. Same screens on Android, iPhone and web.', [f'{i:02d}' for i in range(1, 16)] + ['20', '24', '27', '29']),
     ('Distributor console', 'For distributor owners and order-desk staff.', ['16', '17']),
-    ('Admin panel', 'For the MediLink team.', ['18', '19', '21']),
+    ('Admin panel', 'For the MediLink team.', ['18', '19', '21', '25', '26', '28']),
     ('Shop app: when something goes wrong', 'Calm, translated screens instead of errors. They check again by themselves and disappear when MediLink is back.', ['22', '23']),
 ]
 

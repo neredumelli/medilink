@@ -9,8 +9,10 @@ import { family, fonts, useTheme } from '@/theme';
 import { Icon, IconName } from '@/icons';
 import { Btn, Card, CardBox, H2, inr0, Loading, Muted, ProductCard, ProductTile } from '@/ui';
 
+const fmtDay = (iso: string | null) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+
 interface Home {
-  shop: { name: string; canOrder: boolean };
+  shop: { name: string; canOrder: boolean; kycStatus?: string; licence?: { state: string; expiresOn: string | null; daysLeft: number | null; which: string | null } };
   chips: { onTheWay: number; creditFreePaise: number; shortageCount: number };
   usual: { productId: string; name: string; category: string; usualQty: number }[];
   lastDelivered: { id: string; items: unknown[] } | null;
@@ -117,7 +119,23 @@ export default function HomeScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await load().catch(() => {}); setRefreshing(false); }} />}>
-        {home && !home.shop.canOrder && (
+        {home?.shop.licence?.state === 'expired' && (
+          <View style={{ backgroundColor: t.coralSoft, borderRadius: 14, padding: 12, gap: 4 }} accessibilityRole="alert">
+            <Text style={{ color: t.coral, fontFamily: fonts.bodyBold, fontSize: 16 }}>{tr('licenceExpiredTitle')}</Text>
+            <Text style={{ color: t.ink, fontFamily: fonts.body }}>
+              {tr('expiredOn')} {fmtDay(home.shop.licence.expiresOn)} ({home.shop.licence.which}). {tr('licenceExpiredBody')}
+            </Text>
+          </View>
+        )}
+        {home?.shop.licence?.state === 'expiring' && (
+          <View style={{ backgroundColor: t.sunSoft, borderRadius: 14, padding: 12, gap: 4 }}>
+            <Text style={{ color: t.sunInk, fontFamily: fonts.bodyBold, fontSize: 16 }}>{tr('licenceExpiringTitle')}</Text>
+            <Text style={{ color: t.ink, fontFamily: fonts.body }}>
+              {tr('expiresOn')} {fmtDay(home.shop.licence.expiresOn)} ({home.shop.licence.which}) · {home.shop.licence.daysLeft} {tr('daysLeft')}. {tr('licenceExpiringBody')}
+            </Text>
+          </View>
+        )}
+        {home && !home.shop.canOrder && home.shop.kycStatus !== 'APPROVED' && (
           <View style={{ backgroundColor: t.skySoft, borderRadius: 14, padding: 12 }}>
             <Text style={{ color: t.sky, fontFamily: fonts.bodyBold }}>Your shop documents are being checked. You can fill your cart now; ordering opens once approved.</Text>
           </View>

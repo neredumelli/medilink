@@ -20,6 +20,8 @@ interface ParsedLine {
   product: { name: string } | null;
 }
 
+const fmtDay = (iso: string | null) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
+
 export default function ShopHome() {
   const { t, toast } = useSession();
   const { home, refresh, markStart } = useShop();
@@ -106,7 +108,23 @@ export default function ShopHome() {
       </header>
 
       <main className="r-main">
-        {home && !home.shop.canOrder && (
+        {home?.shop.licence?.state === 'expired' && (
+          <div className="note c-coral" role="alert">
+            <b>{t('licenceExpiredTitle')}</b>
+            <span>
+              {t('expiredOn')} {fmtDay(home.shop.licence.expiresOn)} ({home.shop.licence.which}). {t('licenceExpiredBody')}
+            </span>
+          </div>
+        )}
+        {home?.shop.licence?.state === 'expiring' && (
+          <div className="note c-sun">
+            <b>{t('licenceExpiringTitle')}</b>
+            <span>
+              {t('expiresOn')} {fmtDay(home.shop.licence.expiresOn)} ({home.shop.licence.which}) · {home.shop.licence.daysLeft} {t('daysLeft')}. {t('licenceExpiringBody')}
+            </span>
+          </div>
+        )}
+        {home && !home.shop.canOrder && home.shop.kycStatus !== 'APPROVED' && (
           <div className="note c-sky">
             <b>Your shop documents are being checked.</b>
             <span>You can search and fill your cart now. Ordering opens as soon as they are approved.</span>

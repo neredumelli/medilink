@@ -9,10 +9,12 @@ export function AdminTabs() {
   const tabs = [
     { href: '/admin', label: 'Overview' },
     { href: '/admin/users', label: 'Users & access' },
+    { href: '/admin/products', label: 'Medicines' },
+    { href: '/admin/fields', label: 'Data fields' },
     { href: '/admin/settings', label: 'Settings' },
   ];
   return (
-    <div className="seg" role="tablist" aria-label="Admin sections" style={{ background: 'rgba(255,255,255,.16)' }}>
+    <div className="seg" role="tablist" aria-label="Admin sections" style={{ background: 'rgba(255,255,255,.16)', flexWrap: 'wrap' }}>
       {tabs.map((t) => {
         const on = t.href === '/admin' ? path === '/admin' : path.startsWith(t.href);
         return (
