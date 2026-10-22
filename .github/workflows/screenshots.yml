@@ -55,7 +55,7 @@ jobs:
         run: |
           git config user.name "medilink-bot"
           git config user.email "medilink-bot@users.noreply.github.com"
-          git checkout -- . 2>/dev/null || true   # drop build-time edits to tracked files
+          git checkout -- apps/web/next-env.d.ts 2>/dev/null || true   # Next rewrites this file during build
           git add docs/screenshots
           git commit -m "Update UI screenshots [skip ci]" || { echo "No changes"; exit 0; }
           git pull --rebase --autostash origin main 2>&1 | tail -3
