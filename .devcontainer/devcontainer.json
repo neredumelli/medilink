@@ -11,6 +11,14 @@
     "3000": {
       "label": "MediLink web app",
       "onAutoForward": "openBrowser"
+    },
+    "4000": {
+      "label": "MediLink API (no page; use port 3000)",
+      "onAutoForward": "silent"
+    },
+    "5432": {
+      "label": "Database",
+      "onAutoForward": "silent"
     }
   },
   "postCreateCommand": "bash .devcontainer/setup.sh",
