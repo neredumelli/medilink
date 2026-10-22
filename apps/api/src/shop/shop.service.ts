@@ -106,9 +106,10 @@ export class ShopService {
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!product) throw new NotFoundException('Medicine not found');
     const offers = (await this.catalog.offersFor(retailerId, [productId])).get(productId) ?? [];
-    let chosen = distributorId;
-    if (chosen) {
-      if (!offers.some((o) => o.distributorId === chosen && o.stockQty > 0)) throw new ConflictException('That distributor has no stock of this medicine right now');
+    let chosen: string;
+    if (distributorId) {
+      if (!offers.some((o) => o.distributorId === distributorId && o.stockQty > 0)) throw new ConflictException('That distributor has no stock of this medicine right now');
+      chosen = distributorId;
     } else {
       const best = pickBest(CatalogService.toCoreOffers(productId, offers), qty, { gstPct: product.gstPct });
       if (!best) throw new ConflictException(`${product.name} is out of stock at all your distributors`);

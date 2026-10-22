@@ -1,12 +1,14 @@
 {
   "name": "medilink",
   "private": true,
-  "description": "MediLink — B2B pharma & FMCG ordering for shops, distributors and sales reps (web, Android, iOS).",
+  "description": "MediLink \u2014 B2B pharma & FMCG ordering for shops, distributors and sales reps (web, Android, iOS).",
   "packageManager": "pnpm@9.12.3",
-  "engines": { "node": ">=20.11" },
+  "engines": {
+    "node": ">=20.11"
+  },
   "scripts": {
     "setup": "pnpm install && pnpm db:up && pnpm db:migrate && pnpm db:seed",
-    "dev": "turbo run dev --parallel --filter=@medilink/api --filter=@medilink/web",
+    "dev": "pnpm --filter @medilink/core build && turbo run dev --parallel --filter=@medilink/api --filter=@medilink/web",
     "dev:mobile": "pnpm --filter @medilink/mobile start",
     "build": "turbo run build",
     "test": "turbo run test",
@@ -15,7 +17,8 @@
     "db:up": "docker compose -f infra/docker-compose.yml up -d postgres redis",
     "db:migrate": "pnpm --filter @medilink/api prisma:migrate",
     "db:seed": "pnpm --filter @medilink/api prisma:seed",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "postinstall": "pnpm --filter @medilink/core build"
   },
   "devDependencies": {
     "prettier": "3.3.3",
