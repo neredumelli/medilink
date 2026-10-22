@@ -24,8 +24,5 @@
         "README.md"
       ]
     }
-  },
-  "hostRequirements": {
-    "cpus": 4
   }
 }
