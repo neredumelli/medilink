@@ -25,6 +25,11 @@ async function waitForNewOtp(mobile, before) {
 
 async function shot(page, name, title, opts = {}) {
   await page.waitForTimeout(opts.wait ?? 700);
+  if (opts.fullPage) {
+    // Floating bars and pop-ups land mid-image on full-page captures: pin them in normal flow and hide toasts.
+    await page.addStyleTag({ content: '.cartbar,.bnav,.topnav,.rolebar{position:static!important}.toast{display:none!important}' }).catch(() => {});
+    await page.waitForTimeout(200);
+  }
   const file = path.join(OUT, `${name}.png`);
   await page.screenshot({ path: file, fullPage: opts.fullPage ?? false });
   results.push({ name, title, file: `${name}.png` });

@@ -176,7 +176,7 @@ export default function UsersPage() {
                 {rows?.map((u) => (
                   <tr key={u.id} onClick={() => open(u.id)} style={{ cursor: 'pointer', background: sel?.user.id === u.id ? 'var(--brand-soft)' : undefined }}>
                     <td>
-                      <button className="linkbtn" style={{ padding: 0, textDecoration: 'none', color: 'var(--ink)', fontWeight: 800, fontSize: 14 }} onClick={() => open(u.id)}>
+                      <button className="linkbtn" style={{ padding: 0, textDecoration: 'none', color: 'var(--ink)', fontWeight: 800, fontSize: 14, textAlign: 'left' }} onClick={() => open(u.id)}>
                         {u.name}
                       </button>
                       <div className="hint">
