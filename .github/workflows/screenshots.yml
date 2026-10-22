@@ -51,10 +51,15 @@ jobs:
         if: failure()
         run: grep -iE "error|exception" api.log web.log | head -30 | while IFS= read -r l; do echo "::error::$l"; done || true
       - name: Save screenshots to the repository
+        shell: bash
         run: |
           git config user.name "medilink-bot"
           git config user.email "medilink-bot@users.noreply.github.com"
+          git checkout -- . 2>/dev/null || true   # drop build-time edits to tracked files
           git add docs/screenshots
-          git commit -m "Update UI screenshots [skip ci]" || echo "No changes"
-          git pull --rebase origin main
-          git push
+          git commit -m "Update UI screenshots [skip ci]" || { echo "No changes"; exit 0; }
+          git pull --rebase --autostash origin main 2>&1 | tail -3
+          git push origin HEAD:main 2>&1 | tee /tmp/push.txt
+          code=${PIPESTATUS[0]}
+          [ $code -ne 0 ] && while IFS= read -r l; do echo "::error::$l"; done < /tmp/push.txt
+          exit $code
