@@ -7,6 +7,13 @@ import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { config } from './config';
 
+// Load settings from apps/api/.env (Node 20.12+ built-in, no extra package needed).
+try {
+  process.loadEnvFile('.env');
+} catch {
+  /* no .env file: rely on real environment variables (production) */
+}
+
 async function bootstrap() {
   const cfg = config(); // fails fast with a clear message if .env is incomplete
   // rawBody is needed to verify sync-agent signatures

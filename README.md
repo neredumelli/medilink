@@ -16,16 +16,20 @@ B2B ordering for pharmacies, distributors and sales reps in India. Shops search 
 | `docs/architecture.md` | Diagram and key decisions | |
 
 ## Run it locally
-Requirements: Node 20+, pnpm 9, Docker (for PostgreSQL).
+Requirements: Node 20.12+, pnpm 9, Docker Desktop (for PostgreSQL).
 
 ```bash
-cp .env.example .env            # fill in JWT secrets (openssl rand -hex 32)
-pnpm setup                      # install, start Postgres, run migrations, load demo data
-pnpm dev                        # API on :4000 (docs at /api/docs), web on :3000
-pnpm dev:mobile                 # Expo: press a for Android, i for iOS simulator
+pnpm install
+cp .env.example apps/api/.env          # Windows: copy .env.example apps\api\.env
+cp .env.example apps/web/.env.local    # Windows: copy .env.example apps\web\.env.local
+pnpm db:up                             # starts PostgreSQL in Docker
+pnpm db:migrate                        # creates the tables
+pnpm db:seed                           # loads Hyderabad demo data
+pnpm dev                               # API on :4000 (docs at /api/docs), web on :3000
+pnpm dev:mobile                        # Expo: press a for Android, i for iOS simulator
 ```
 
-With `OTP_PROVIDER=console`, the login code is printed in the API terminal.
+Open http://localhost:3000. With `OTP_PROVIDER=console`, the 6-digit login code is printed in the terminal running `pnpm dev`.
 
 ### Demo logins (from the seed)
 | Role | Mobile |
