@@ -98,5 +98,20 @@
     "name": "20-shop-sees-billed",
     "title": "Shop sees the order billed by the distributor",
     "file": "20-shop-sees-billed.png"
+  },
+  {
+    "name": "21-admin-settings-maintenance",
+    "title": "Admin settings: one switch for planned maintenance, with message and return time",
+    "file": "21-admin-settings-maintenance.png"
+  },
+  {
+    "name": "22-shop-maintenance-screen",
+    "title": "Shop during maintenance: friendly screen in their language, checks again by itself",
+    "file": "22-shop-maintenance-screen.png"
+  },
+  {
+    "name": "23-page-not-found",
+    "title": "Old or mistyped link: friendly page with a way home",
+    "file": "23-page-not-found.png"
   }
 ]
