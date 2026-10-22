@@ -53,6 +53,15 @@ if exist "%CA_FILE%" (
   echo [1/7] Could not read Windows certificates. Downloads may fail on an office network.
 )
 
+REM ---------- 1c. Company package mirror (optional) ----------
+REM If IT gives you an internal npm mirror (Artifactory, Nexus, Azure Artifacts), put its URL
+REM on one line in npm-registry.txt next to this file.
+if exist "%~dp0npm-registry.txt" (
+  set /p NPM_MIRROR=<"%~dp0npm-registry.txt"
+  set "npm_config_registry=!NPM_MIRROR!"
+  echo [1/7] Using company package mirror: !NPM_MIRROR!
+)
+
 REM ---------- 2. pnpm ----------
 where pnpm >nul 2>nul
 if errorlevel 1 (
@@ -164,6 +173,8 @@ goto :eof
 :fail
 echo.
 echo  Something went wrong. Copy the text above and send it to Claude for a fix.
-echo  On an office network you may also need to ask IT to allow registry.npmjs.org, binaries.prisma.sh and Docker Hub.
+echo  "403 Forbidden" means the office network blocks the download site. Either ask IT to allow
+echo  registry.npmjs.org, binaries.prisma.sh and Docker Hub, or put ITs internal npm mirror URL
+echo  in npm-registry.txt, or run this file once on a home network or phone hotspot.
 pause
 exit /b 1
