@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
-# Runs once when the Codespace is created: install, database, demo data.
+# One-time setup: libraries, database, demo data. Safe to run again.
 set -e
-corepack enable
+cd "$(dirname "$0")/.."
+echo "== MediLink setup =="
+corepack enable >/dev/null 2>&1 || npm install -g pnpm@9
 pnpm install
-cp -n .env.example apps/api/.env || true
-cp -n .env.example apps/web/.env.local || true
-# In Codespaces the browser reaches the API through a forwarded URL, not localhost.
-if [ -n "$CODESPACE_NAME" ]; then
-  API="https://${CODESPACE_NAME}-4000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}/api"
-  WEB="https://${CODESPACE_NAME}-3000.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}"
-  sed -i "s#^NEXT_PUBLIC_API_URL=.*#NEXT_PUBLIC_API_URL=${API}#" apps/web/.env.local
-  sed -i "s#^CORS_ORIGINS=.*#CORS_ORIGINS=${WEB}#" apps/api/.env
-fi
+[ -f apps/api/.env ] || cp .env.example apps/api/.env
+[ -f apps/web/.env.local ] || cp .env.example apps/web/.env.local
 docker compose -f infra/docker-compose.yml up -d postgres redis
+echo "Waiting for the database..."
 until docker compose -f infra/docker-compose.yml exec -T postgres pg_isready -U medilink >/dev/null 2>&1; do sleep 2; done
 pnpm --filter @medilink/api prisma:deploy
-pnpm --filter @medilink/api prisma:seed
-echo "Setup done. Run: pnpm dev"
+if [ ! -f .seeded ]; then
+  pnpm --filter @medilink/api prisma:seed
+  touch .seeded
+fi
+echo
+echo "== Setup done. Starting MediLink. =="
+echo "When a box says 'Your application running on port 3000 is available', click 'Open in Browser'."
+echo "Logins: shop 9848012345 · distributor 9876500001 · admin 9000000001"
+echo "The 6-digit OTP appears in this terminal: look for 'OTP for 98...'"
+echo

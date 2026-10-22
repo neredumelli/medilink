@@ -1,11 +1,17 @@
 {
   "name": "MediLink",
   "image": "mcr.microsoft.com/devcontainers/typescript-node:1-20-bookworm",
-  "features": { "ghcr.io/devcontainers/features/docker-in-docker:2": {} },
-  "forwardPorts": [3000, 4000],
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "forwardPorts": [
+    3000
+  ],
   "portsAttributes": {
-    "3000": { "label": "MediLink web app", "onAutoForward": "openBrowser" },
-    "4000": { "label": "MediLink API", "visibility": "public" }
+    "3000": {
+      "label": "MediLink web app",
+      "onAutoForward": "openBrowser"
+    }
   },
   "postCreateCommand": "bash .devcontainer/setup.sh",
   "postStartCommand": "docker compose -f infra/docker-compose.yml up -d postgres redis"

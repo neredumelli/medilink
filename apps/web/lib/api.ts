@@ -4,7 +4,7 @@
  * Small API client. Access tokens live in memory; the refresh token is kept in localStorage so a
  * shop owner stays logged in on the counter PC. (Phase 5 hardening: move refresh to an httpOnly cookie.)
  */
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? '/api';
 const RT_KEY = 'ml.rt';
 
 let accessToken: string | null = null;
