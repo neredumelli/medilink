@@ -20,6 +20,18 @@ const Stock = z.object({
         scheme: z.string().max(20).optional(),
         nearestExpiry: z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/).optional(),
         barcode: z.string().max(20).optional(),
+        /** Optional batch-wise stock. When sent, it replaces the item's batches and sets the nearest expiry. */
+        batches: z
+          .array(
+            z.object({
+              batchNo: z.string().trim().min(1).max(30),
+              expiry: z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/),
+              qty: z.number().min(0),
+              mrp: z.number().min(0).optional(),
+            }),
+          )
+          .max(200)
+          .optional(),
       }),
     )
     .max(5000),

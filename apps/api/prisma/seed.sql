@@ -180,5 +180,54 @@ INSERT INTO "RetailerProductPref" ("retailerId","productId","usualQty","orderCou
 INSERT INTO "RetailerProductPref" ("retailerId","productId","usualQty","orderCount") VALUES ('3dff5988-993a-5a35-ad55-b4b7bab53a24','808efa03-70df-5219-805c-f4c6d33d902d',10,4);
 INSERT INTO "RetailerProductPref" ("retailerId","productId","usualQty","orderCount") VALUES ('3dff5988-993a-5a35-ad55-b4b7bab53a24','28cafc56-6ff9-532b-b824-7a57e0b32a75',20,8);
 INSERT INTO "AuditLog" (id,"actorLabel",action,entity,"entityId") VALUES ('8ae30862-d165-5d85-a314-c21701829d03','System','seed','Database',NULL);
+-- ---------------------------------------------------------------- flexible data (aliases, barcodes, batches, licences, custom fields)
+SELECT set_config('app.actor', 'Demo data', true);
+
+-- Names shops actually type or say: spellings, short forms, Telugu and Hindi script.
+INSERT INTO "ProductAlias" (id,"productId",alias) VALUES
+ (gen_random_uuid(),'dfe8c276-fb0c-5aa2-88d7-151d4065f2f9','dolo650'),
+ (gen_random_uuid(),'dfe8c276-fb0c-5aa2-88d7-151d4065f2f9','డోలో'),
+ (gen_random_uuid(),'dfe8c276-fb0c-5aa2-88d7-151d4065f2f9','डोलो'),
+ (gen_random_uuid(),'ff47ffc5-5195-5965-adc9-43d9f15b793a','amoxyclav'),
+ (gen_random_uuid(),'ff47ffc5-5195-5965-adc9-43d9f15b793a','augmantin'),
+ (gen_random_uuid(),'bea0cc52-66cc-57f0-8be7-a97a94c09e0b','becosule'),
+ (gen_random_uuid(),'bea0cc52-66cc-57f0-8be7-a97a94c09e0b','b complex'),
+ (gen_random_uuid(),'fdd86822-803d-548f-b1d2-d107c0ba02fb','liv52'),
+ (gen_random_uuid(),'72fb4dc1-57af-5d96-8da1-8ba1fc94b6b0','ecosprine'),
+ (gen_random_uuid(),'5783957a-7b89-5190-bfe8-50f69cb800e5','షెల్కాల్'),
+ (gen_random_uuid(),'0a11dc41-5aac-5470-b91c-d94e12ed5630','pain gel');
+
+-- Demo barcodes (GS1 "20" prefix = in-store/test codes, not real product codes).
+INSERT INTO "ProductBarcode" (code,"productId") VALUES
+ ('2000000000011','dfe8c276-fb0c-5aa2-88d7-151d4065f2f9'),
+ ('2000000000028','dfe8c276-fb0c-5aa2-88d7-151d4065f2f9'),
+ ('2000000000035','ff47ffc5-5195-5965-adc9-43d9f15b793a'),
+ ('2000000000042','0a11dc41-5aac-5470-b91c-d94e12ed5630');
+
+-- Batch-wise stock at Sri Venkateswara Pharma (nearest expiry is calculated by the database).
+INSERT INTO "ItemBatch" (id,"distributorItemId","batchNo",expiry,"stockQty","mrpPaise","updatedAt") VALUES
+ (gen_random_uuid(),'d0a31fb7-ee9e-5059-9464-1d3d17fd8b07','DL24117','2027-01-01',150,3360,NOW()),
+ (gen_random_uuid(),'d0a31fb7-ee9e-5059-9464-1d3d17fd8b07','DL25032','2027-08-01',150,3360,NOW()),
+ (gen_random_uuid(),'b29d7e3e-9254-5e60-bd8a-7c88f003f9d0','AU5521','2027-06-01',25,22300,NOW()),
+ (gen_random_uuid(),'b29d7e3e-9254-5e60-bd8a-7c88f003f9d0','AU5608','2027-11-01',15,22300,NOW()),
+ (gen_random_uuid(),'608af9f6-735a-54c0-a331-9418fcb587be','VG0912',CURRENT_DATE + 60,6,15500,NOW());
+
+-- Drug licence expiry dates: one shop expiring soon, one expired (cannot order), one distributor expiring soon.
+UPDATE "Retailer" SET "dl20bExpiry" = '2028-03-31', "dl21bExpiry" = '2028-03-31' WHERE id = '3dff5988-993a-5a35-ad55-b4b7bab53a24';
+UPDATE "Retailer" SET "dl20bExpiry" = CURRENT_DATE + 20, "dl21bExpiry" = '2028-06-30' WHERE id = '40985bf5-6c41-51f3-83df-43524e521762';
+UPDATE "Retailer" SET "dl20bExpiry" = CURRENT_DATE - 5, "dl21bExpiry" = CURRENT_DATE - 5 WHERE id = 'e7b6a803-1765-51ca-a424-7409ace62935';
+UPDATE "Retailer" SET "dl20bExpiry" = '2027-12-31', "dl21bExpiry" = '2027-12-31' WHERE id = '4b2e0f80-df62-595e-8521-3a6e8d677155';
+UPDATE "Distributor" SET "drugLicenceExpiry" = '2028-12-31' WHERE code IN ('SVP','LMA','DHD');
+UPDATE "Distributor" SET "drugLicenceExpiry" = CURRENT_DATE + 25 WHERE code = 'SKP';
+
+-- Custom fields the admin added without any code change.
+INSERT INTO "CustomField" (id,entity,key,label,type,options,required,"sortOrder","updatedAt") VALUES
+ (gen_random_uuid(),'PRODUCT','storage','Storage','CHOICE',ARRAY['Room temperature','Cool place (8–25 °C)','Fridge (2–8 °C)'],false,1,NOW()),
+ (gen_random_uuid(),'RETAILER','weekly_off','Weekly holiday','CHOICE',ARRAY['None','Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'],false,1,NOW()),
+ (gen_random_uuid(),'DISTRIBUTOR','order_cutoff','Same-day order cut-off','TEXT',ARRAY[]::TEXT[],false,1,NOW());
+UPDATE "Product" SET extra = '{"storage":"Room temperature"}' WHERE id IN ('0a11dc41-5aac-5470-b91c-d94e12ed5630','dfe8c276-fb0c-5aa2-88d7-151d4065f2f9');
+UPDATE "Retailer" SET extra = '{"weekly_off":"Sunday"}' WHERE id = '3dff5988-993a-5a35-ad55-b4b7bab53a24';
+UPDATE "Distributor" SET extra = '{"order_cutoff":"4:00 pm"}' WHERE code = 'SVP';
+
 SELECT setval('order_number_seq', 10240);
 COMMIT;

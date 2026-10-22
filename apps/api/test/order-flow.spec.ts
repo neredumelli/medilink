@@ -8,6 +8,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { OtpSender } from '../src/auth/otp.sender';
+import { signBody } from '../src/sync/agent.guard';
 
 const codes = new Map<string, string>();
 
@@ -161,5 +162,139 @@ describe('Shop → distributor order flow', () => {
     const dhdOrder = list.body.find((o: any) => o.number === 'ML-10236');
     const other = await login('9876500002'); // Lakshmi Medical
     await request(app.getHttpServer()).post(`/api/distributor/orders/${dhdOrder.id}/dispatch`).set({ Authorization: `Bearer ${other}` }).expect(403);
+  });
+  // ---------------------------------------------------------------- flexible data
+  const DOLO = 'dfe8c276-fb0c-5aa2-88d7-151d4065f2f9';
+  const PAN40 = '1fe76230-ce98-5abe-a5c3-e16d20dcb418';
+
+  it('finds medicines by other names, Telugu/Hindi script and any of their barcodes', async () => {
+    const auth = { Authorization: `Bearer ${await login('9848012345')}` };
+    for (const q of ['డోలో', 'डोलो', 'dolo650']) {
+      const r = await request(app.getHttpServer()).get(`/api/catalog/search?q=${encodeURIComponent(q)}`).set(auth).expect(200);
+      expect(r.body[0].product.name).toBe('Dolo 650');
+    }
+    const amox = await request(app.getHttpServer()).get('/api/catalog/search?q=amoxyclav').set(auth).expect(200);
+    expect(amox.body[0].product.name).toBe('Augmentin 625 Duo');
+    for (const code of ['2000000000011', '2000000000028']) {
+      const r = await request(app.getHttpServer()).get(`/api/catalog/barcode/${code}`).set(auth).expect(200);
+      expect(r.body.product.id).toBe(DOLO);
+    }
+  });
+
+  it('admin adds and removes another name; the change history records who did it', async () => {
+    const admin = { Authorization: `Bearer ${await login('9000000001')}` };
+    const shop = { Authorization: `Bearer ${await login('9848012345')}` };
+    const added = await request(app.getHttpServer()).post(`/api/admin/products/${PAN40}/aliases`).set(admin).send({ alias: '  Pantop  Forty ' }).expect(201);
+    const a = added.body.find((x: any) => x.alias === 'pantop forty');
+    expect(a).toBeTruthy();
+    await request(app.getHttpServer()).post(`/api/admin/products/${PAN40}/aliases`).set(admin).send({ alias: 'pantop forty' }).expect(409);
+    const found = await request(app.getHttpServer()).get('/api/catalog/search?q=pantop forty').set(shop).expect(200);
+    expect(found.body[0].product.id).toBe(PAN40);
+    await request(app.getHttpServer()).delete(`/api/admin/products/${PAN40}/aliases/${a.id}`).set(admin).expect(200);
+
+    // Barcode already used by another medicine is refused with a clear reason
+    const taken = await request(app.getHttpServer()).post(`/api/admin/products/${PAN40}/barcodes`).set(admin).send({ code: '2000000000011' }).expect(409);
+    expect(taken.body.message).toContain('Dolo 650');
+
+    const detail = await request(app.getHttpServer()).get(`/api/admin/products/${PAN40}`).set(admin).expect(200);
+    const aliasEvents = detail.body.history.filter((h: any) => h.table === 'ProductAlias');
+    expect(aliasEvents.map((h: any) => h.op)).toEqual(expect.arrayContaining(['INSERT', 'DELETE']));
+    expect(aliasEvents[0].actor).toBe('Platform Admin');
+  });
+
+  it('a recalled medicine cannot be added or ordered, and shops see why', async () => {
+    const admin = { Authorization: `Bearer ${await login('9000000001')}` };
+    const shop = { Authorization: `Bearer ${await login('9848012345')}` };
+    await request(app.getHttpServer()).post(`/api/admin/products/${PAN40}/status`).set(admin).send({ status: 'RECALLED' }).expect(400); // note required
+    try {
+      await request(app.getHttpServer()).post(`/api/admin/products/${PAN40}/status`).set(admin).send({ status: 'RECALLED', note: 'Test recall notice R-1.' }).expect(201);
+      const s = await request(app.getHttpServer()).get('/api/catalog/search?q=pan 40').set(shop).expect(200);
+      const card = s.body.find((c: any) => c.product.id === PAN40);
+      expect(card.blocked).toMatch(/recalled.*R-1/);
+      expect(card.best).toBeNull();
+      expect(card.offers).toHaveLength(0);
+      expect(card.substitutes.map((x: any) => x.name)).toContain('Pantocid 40');
+      const add = await request(app.getHttpServer()).put(`/api/shop/cart/${PAN40}`).set(shop).send({ qty: 5 }).expect(409);
+      expect(add.body.message).toMatch(/recalled/);
+    } finally {
+      await request(app.getHttpServer()).post(`/api/admin/products/${PAN40}/status`).set(admin).send({ status: 'ACTIVE' }).expect(201);
+    }
+    await request(app.getHttpServer()).put(`/api/shop/cart/${PAN40}`).set(shop).send({ qty: 5 }).expect(200);
+    await request(app.getHttpServer()).delete(`/api/shop/cart/${PAN40}`).set(shop).expect(200);
+  });
+
+  it('a shop with an expired licence cannot order until the renewal is recorded', async () => {
+    const admin = { Authorization: `Bearer ${await login('9000000001')}` };
+    const krishna = { Authorization: `Bearer ${await login('9848044444')}` }; // licence expired 5 days ago (seed)
+    const sai = { Authorization: `Bearer ${await login('9848022222')}` }; // expires in 20 days
+
+    const home = await request(app.getHttpServer()).get('/api/shop/home').set(krishna).expect(200);
+    expect(home.body.shop.canOrder).toBe(false);
+    expect(home.body.shop.licence.state).toBe('expired');
+    expect(home.body.shop.licence.message).toMatch(/expired on/);
+
+    const soon = await request(app.getHttpServer()).get('/api/shop/home').set(sai).expect(200);
+    expect(soon.body.shop.canOrder).toBe(true);
+    expect(soon.body.shop.licence).toMatchObject({ state: 'expiring', daysLeft: 20, which: '20B' });
+
+    const dolo = await request(app.getHttpServer()).get('/api/catalog/search?q=dolo').set(krishna).expect(200);
+    if (dolo.body[0].best) await request(app.getHttpServer()).put(`/api/shop/cart/${DOLO}`).set(krishna).send({ qty: 10 }).expect(200);
+    const blocked = await request(app.getHttpServer()).post('/api/shop/orders').set(krishna).send({ source: 'WEB' }).expect(403);
+    expect(blocked.body).toMatchObject({ licenceExpired: true });
+
+    const alerts = await request(app.getHttpServer()).get('/api/admin/licences').set(admin).expect(200);
+    const names = alerts.body.map((a: any) => a.name);
+    expect(names).toEqual(expect.arrayContaining(['Krishna Medical Hall', 'Sri Sai Medicals', 'Sai Krishna Pharma']));
+    const k = alerts.body.find((a: any) => a.name === 'Krishna Medical Hall');
+    await request(app.getHttpServer()).post(`/api/admin/licences/shop/${k.id}`).set(admin).send({ dl20bExpiry: '2020-01-01' }).expect(400);
+    await request(app.getHttpServer()).post(`/api/admin/licences/shop/${k.id}`).set(admin).send({ dl20bExpiry: '2029-03-31', dl21bExpiry: '2029-03-31' }).expect(201);
+    const after = await request(app.getHttpServer()).get('/api/shop/home').set(krishna).expect(200);
+    expect(after.body.shop.canOrder).toBe(true);
+    await request(app.getHttpServer()).delete(`/api/shop/cart/${DOLO}`).set(krishna).expect(200);
+  });
+
+  it('admin adds a custom field without code changes; values are checked', async () => {
+    const admin = { Authorization: `Bearer ${await login('9000000001')}` };
+    const fields = await request(app.getHttpServer()).get('/api/admin/fields?entity=PRODUCT').set(admin).expect(200);
+    expect(fields.body.map((f: any) => f.key)).toContain('storage');
+
+    const f = await request(app.getHttpServer()).post('/api/admin/fields').set(admin).send({ entity: 'PRODUCT', label: 'Pack weight (g)', type: 'NUMBER' }).expect(201);
+    expect(f.body.key).toBe('pack_weight_g');
+    await request(app.getHttpServer()).post('/api/admin/fields').set(admin).send({ entity: 'PRODUCT', label: 'Pack weight (g)', type: 'TEXT' }).expect(409);
+    await request(app.getHttpServer()).post('/api/admin/fields').set(admin).send({ entity: 'PRODUCT', label: 'Colour', type: 'CHOICE', options: [] }).expect(400);
+
+    const bad = await request(app.getHttpServer()).put(`/api/admin/extra/product/${PAN40}`).set(admin).send({ values: { pack_weight_g: 'heavy', storage: 'Freezer' } }).expect(400);
+    expect(bad.body.errors).toHaveLength(2);
+    const ok = await request(app.getHttpServer()).put(`/api/admin/extra/product/${PAN40}`).set(admin).send({ values: { pack_weight_g: '12.5', storage: 'fridge (2–8 °c)' } }).expect(200);
+    expect(ok.body).toEqual({ pack_weight_g: 12.5, storage: 'Fridge (2–8 °C)' });
+
+    await request(app.getHttpServer()).patch(`/api/admin/fields/${f.body.id}`).set(admin).send({ active: false }).expect(200);
+    const detail = await request(app.getHttpServer()).get(`/api/admin/products/${PAN40}`).set(admin).expect(200);
+    expect(detail.body.product.extra.pack_weight_g).toBe(12.5); // switching a field off never loses data
+  });
+
+  it('batch-wise stock from the billing software sets the nearest expiry', async () => {
+    const admin = { Authorization: `Bearer ${await login('9000000001')}` };
+    const SKP = '3b27d4bb-05c1-5e54-9d98-46babf13c18c';
+    const { body } = await request(app.getHttpServer()).post(`/api/admin/distributors/${SKP}/agent-key`).set(admin).send({ software: 'CSV' }).expect(201);
+    const push = async (items: unknown[]) => {
+      const raw = JSON.stringify({ items });
+      const ts = String(Date.now());
+      return request(app.getHttpServer())
+        .post('/api/sync/stock')
+        .set({ Authorization: `Bearer ${body.key}`, 'X-Timestamp': ts, 'X-Signature': signBody(body.key, ts, raw), 'content-type': 'application/json' })
+        .send(raw);
+    };
+    const row = { externalCode: 'SKP-T1', name: 'DOLO 650 TAB 15S', stockQty: 0, ptr: 24, barcode: '2000000000028' };
+    await push([{ ...row, batches: [ { batchNo: 'B1', expiry: '2027-09', qty: 5 }, { batchNo: 'B2', expiry: '2027-03-15', qty: 0 }, { batchNo: 'B3', expiry: '2027-05-01', qty: 3 } ] }]).expect(200);
+    const stockOf = async () => (await request(app.getHttpServer()).get(`/api/admin/products/${DOLO}`).set(admin).expect(200)).body.stock.find((s: any) => s.externalCode === 'SKP-T1');
+    let s = await stockOf();
+    expect(s.nearestExpiry.slice(0, 10)).toBe('2027-05-01'); // B2 has no stock, so it does not count
+    expect(s.batches).toHaveLength(3);
+
+    await push([{ ...row, batches: [{ batchNo: 'B1', expiry: '2027-09', qty: 5 }] }]).expect(200); // B2, B3 sold out and gone
+    s = await stockOf();
+    expect(s.nearestExpiry.slice(0, 10)).toBe('2027-09-01');
+    expect(s.batches.map((b: any) => b.batchNo)).toEqual(['B1']);
   });
 });

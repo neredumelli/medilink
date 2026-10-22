@@ -30,7 +30,7 @@ export class CatalogController {
   @Roles(...RETAILER_ROLES)
   @Get('barcode/:code')
   barcode(@CurrentUser() user: AuthUser, @Param('code') code: string) {
-    return this.catalog.byBarcode(requireRetailer(user), code.replace(/\D/g, '').slice(0, 20));
+    return this.catalog.byBarcode(requireRetailer(user), code.replace(/[^0-9A-Za-z-]/g, '').slice(0, 20));
   }
 
   /** Names only, for offline search and list reading on the phone. */

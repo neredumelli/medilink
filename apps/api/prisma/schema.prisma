@@ -71,6 +71,28 @@ enum Category {
   OTHER
 }
 
+/// ACTIVE = can be ordered. The other states keep the record (never deleted) but block ordering.
+enum ProductStatus {
+  ACTIVE
+  DISCONTINUED
+  BANNED
+  RECALLED
+}
+
+enum FieldEntity {
+  PRODUCT
+  RETAILER
+  DISTRIBUTOR
+}
+
+enum FieldType {
+  TEXT
+  NUMBER
+  DATE
+  YESNO
+  CHOICE
+}
+
 enum OrderStatus {
   PLACED
   ACCEPTED
@@ -133,7 +155,12 @@ model Retailer {
   gstin     String?   @unique @db.VarChar(15)
   dl20b     String?
   dl21b     String?
+  /// licence expiry dates: ordering stops after expiry, warning 30 days before
+  dl20bExpiry DateTime? @db.Date
+  dl21bExpiry DateTime? @db.Date
   pan       String?   @db.VarChar(10)
+  /// values for admin-defined custom fields (see CustomField)
+  extra     Json      @default("{}")
   lat       Float?
   lng       Float?
   kycStatus KycStatus @default(PENDING)
@@ -159,6 +186,8 @@ model Distributor {
   address         String
   gstin           String?         @unique @db.VarChar(15)
   drugLicence     String?
+  drugLicenceExpiry DateTime?   @db.Date
+  extra           Json            @default("{}")
   billingSoftware BillingSoftware @default(CSV)
   deliveryLabel   String          @default("Today") // shown to shops, e.g. "Today, ~3 hrs"
   etaHours        Int             @default(6)
@@ -226,9 +255,13 @@ model Product {
   schedule   Schedule @default(NONE)
   category   Category @default(OTHER)
   mrpPaise   Int
-  barcode    String?  @unique
-  /// lower-case "name salt company" used by trigram search
-  searchText String
+  status     ProductStatus @default(ACTIVE)
+  /// shown to shops when not ACTIVE, e.g. "CDSCO ban notice 12 Oct 2026"
+  statusNote String?
+  statusAt   DateTime?
+  extra      Json     @default("{}")
+  /// lower-case "name salt company aliases": kept up to date by a database trigger
+  searchText String   @default("")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -237,7 +270,10 @@ model Product {
   orderItems OrderItem[]
   shortages ShortageItem[]
   prefs    RetailerProductPref[]
+  aliases  ProductAlias[]
+  barcodes ProductBarcode[]
 
+  @@index([status])
   @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin, map: "Product_searchText_trgm_idx")
 }
 
@@ -263,6 +299,7 @@ model DistributorItem {
   distributor Distributor @relation(fields: [distributorId], references: [id], onDelete: Cascade)
   product     Product?    @relation(fields: [productId], references: [id])
   orderItems  OrderItem[]
+  batches     ItemBatch[]
 
   @@unique([distributorId, externalCode])
   @@index([productId])
@@ -473,4 +510,76 @@ model IdempotencyKey {
 
   @@unique([userId, key])
   @@index([createdAt])
+}
+
+// ---------------------------------------------------------------- flexible data (added without code changes)
+
+/// Other names shops use for a medicine: local spellings, Telugu/Hindi script, old names. Search includes them.
+model ProductAlias {
+  id        String   @id @default(uuid()) @db.Uuid
+  productId String   @db.Uuid
+  alias     String   @db.VarChar(80)
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, alias])
+}
+
+/// A medicine can have several barcodes (pack sizes, old and new packaging). One barcode belongs to one medicine.
+model ProductBarcode {
+  code      String   @id @db.VarChar(20)
+  productId String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+/// Batch-wise stock from the distributor's billing software. The item's nearest expiry is kept in step by a trigger.
+model ItemBatch {
+  id                String   @id @default(uuid()) @db.Uuid
+  distributorItemId String   @db.Uuid
+  batchNo           String   @db.VarChar(30)
+  expiry            DateTime @db.Date
+  stockQty          Int      @default(0)
+  mrpPaise          Int?
+  updatedAt         DateTime @updatedAt
+
+  item DistributorItem @relation(fields: [distributorItemId], references: [id], onDelete: Cascade)
+
+  @@unique([distributorItemId, batchNo])
+  @@index([expiry])
+}
+
+/// Extra fields the admin can add to medicines, shops or distributors (e.g. "Storage: Fridge"). Values live in each row's `extra`.
+model CustomField {
+  id        String      @id @default(uuid()) @db.Uuid
+  entity    FieldEntity
+  key       String      @db.VarChar(40)
+  label     String      @db.VarChar(60)
+  type      FieldType
+  options   String[]    @default([])
+  required  Boolean     @default(false)
+  active    Boolean     @default(true)
+  sortOrder Int         @default(0)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([entity, key])
+}
+
+/// Every change to important rows, written by database triggers (cannot be skipped or edited by the app).
+model RowHistory {
+  id        BigInt   @id @default(autoincrement())
+  tableName String
+  rowId     String
+  op        String   @db.VarChar(6)
+  /// { field: [old, new] }
+  changes   Json
+  actor     String?
+  changedAt DateTime @default(now())
+
+  @@index([tableName, rowId, changedAt])
 }

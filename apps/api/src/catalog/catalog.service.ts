@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Product } from '@prisma/client';
-import { billedRate, isShortExpiry, netRate, Offer, pickBest, stockLevel } from '@medilink/core';
+import { billedRate, isShortExpiry, netRate, Offer, pickBest, productBlockedMessage, stockLevel } from '@medilink/core';
 import { PrismaService } from '../prisma.service';
 
 export interface OfferView {
@@ -23,8 +23,18 @@ export interface OfferView {
   stockUpdatedAt: string;
 }
 
+/** Today's date as stored in DATE columns (midnight UTC), for licence checks. */
+export function todayDate(now = new Date()) {
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+}
+
+/** Distributors whose wholesale licence has not expired (no date recorded = allowed). */
+export const licensedDistributor = (now = new Date()): Prisma.DistributorWhereInput => ({ OR: [{ drugLicenceExpiry: null }, { drugLicenceExpiry: { gte: todayDate(now) } }] });
+
 export interface ProductCard {
-  product: Pick<Product, 'id' | 'name' | 'form' | 'pack' | 'salt' | 'company' | 'schedule' | 'category' | 'mrpPaise' | 'gstPct'>;
+  product: Pick<Product, 'id' | 'name' | 'form' | 'pack' | 'salt' | 'company' | 'schedule' | 'category' | 'mrpPaise' | 'gstPct' | 'status' | 'statusNote'>;
+  /** Why this medicine cannot be ordered (banned, recalled, discontinued); null when it can. */
+  blocked: string | null;
   usualQty: number;
   offers: OfferView[];
   best: { distributorId: string; netRatePaise: number; partial: boolean; overCredit: boolean; reasons: string[] } | null;
@@ -45,6 +55,7 @@ export class CatalogService {
       SELECT id FROM "Product"
       WHERE ${term} <% "searchText" OR "searchText" ILIKE ${'%' + term + '%'}
       ORDER BY (lower(name) LIKE ${term + '%'}) DESC,
+               (status = 'ACTIVE') DESC,
                word_similarity(${term}, "searchText") DESC,
                name ASC
       LIMIT ${Prisma.raw(String(Math.min(50, Math.max(1, Math.floor(limit)))))}`;
@@ -54,7 +65,7 @@ export class CatalogService {
   /** Credit still free for this shop at each linked distributor (limit − dues − open orders). */
   async linkedCredit(retailerId: string) {
     const links = await this.prisma.retailerDistributorLink.findMany({
-      where: { retailerId, status: 'LINKED' },
+      where: { retailerId, status: 'LINKED', distributor: licensedDistributor() },
       include: { distributor: true },
     });
     return new Map(links.map((l) => [l.distributorId, { link: l, available: l.creditLimitPaise - l.outstandingPaise - l.reservedPaise }]));
@@ -129,13 +140,15 @@ export class CatalogService {
       const p = byId.get(id);
       if (!p) continue;
       const qty = usual.get(id) ?? 10;
-      const list = offers.get(id) ?? [];
-      const best = pickBest(CatalogService.toCoreOffers(id, list), qty, { gstPct: p.gstPct });
-      const unlinkedWithStock = await this.prisma.distributorItem.count({
-        where: { productId: id, stockQty: { gt: 0 }, distributorId: { notIn: linkedIds } },
-      });
+      const blocked = productBlockedMessage(p.name, p.status, p.statusNote);
+      const list = blocked ? [] : offers.get(id) ?? [];
+      const best = blocked ? null : pickBest(CatalogService.toCoreOffers(id, list), qty, { gstPct: p.gstPct });
+      const unlinkedWithStock = blocked
+        ? 0
+        : await this.prisma.distributorItem.count({ where: { productId: id, stockQty: { gt: 0 }, distributorId: { notIn: linkedIds }, distributor: { kycStatus: 'APPROVED', ...licensedDistributor() } } });
       cards.push({
-        product: { id: p.id, name: p.name, form: p.form, pack: p.pack, salt: p.salt, company: p.company, schedule: p.schedule, category: p.category, mrpPaise: p.mrpPaise, gstPct: p.gstPct },
+        product: { id: p.id, name: p.name, form: p.form, pack: p.pack, salt: p.salt, company: p.company, schedule: p.schedule, category: p.category, mrpPaise: p.mrpPaise, gstPct: p.gstPct, status: p.status, statusNote: p.statusNote },
+        blocked,
         usualQty: qty,
         offers: list,
         best: best && { distributorId: best.offer.distributorId, netRatePaise: best.netRate, partial: best.partial, overCredit: best.overCredit, reasons: best.reasons },
@@ -148,7 +161,7 @@ export class CatalogService {
 
   /** Same composition, in stock at a linked distributor — shown when something is out everywhere. */
   async substitutes(retailerId: string, p: Product) {
-    const same = await this.prisma.product.findMany({ where: { salt: { equals: p.salt, mode: 'insensitive' }, id: { not: p.id } }, take: 5 });
+    const same = await this.prisma.product.findMany({ where: { salt: { equals: p.salt, mode: 'insensitive' }, id: { not: p.id }, status: 'ACTIVE' }, take: 5 });
     if (same.length === 0) return [];
     const offers = await this.offersFor(retailerId, same.map((s) => s.id));
     return same
@@ -170,13 +183,13 @@ export class CatalogService {
   }
 
   async byBarcode(retailerId: string, barcode: string) {
-    const p = barcode ? await this.prisma.product.findUnique({ where: { barcode } }) : null;
+    const p = barcode ? await this.prisma.productBarcode.findUnique({ where: { code: barcode } }) : null;
     if (!p) throw new NotFoundException('We could not find this barcode. Try searching by name.');
-    return this.card(retailerId, p.id);
+    return this.card(retailerId, p.productId);
   }
 
   /** Small catalogue list for offline search in the mobile app and for reading pasted lists. */
   async lightCatalog() {
-    return this.prisma.product.findMany({ select: { id: true, name: true, salt: true, company: true, form: true, pack: true, category: true }, orderBy: { name: 'asc' } });
+    return this.prisma.product.findMany({ where: { status: { not: 'DISCONTINUED' } }, select: { id: true, name: true, salt: true, company: true, form: true, pack: true, category: true }, orderBy: { name: 'asc' } });
   }
 }

@@ -188,3 +188,48 @@ test('compareVersions orders app versions numerically', () => {
   assert.equal(c.compareVersions('0.1.0', '0.1'), 0);
   assert.equal(c.compareVersions('0.9.9', '1.0.0'), -1);
 });
+
+/* ---------- flexible data rules ---------- */
+test('licenceState: ok, expiring, expired, missing', () => {
+  const today = new Date('2026-10-22T10:00:00');
+  assert.equal(c.licenceState({ '20B': '2028-03-31', '21B': '2028-03-31' }, today).state, 'ok');
+  const soon = c.licenceState({ '20B': '2026-11-11', '21B': '2028-06-30' }, today);
+  assert.deepEqual([soon.state, soon.daysLeft, soon.which, soon.expiresOn], ['expiring', 20, '20B', '2026-11-11']);
+  assert.equal(c.licenceState({ '20B': '2026-10-22' }, today).state, 'expiring'); // valid through the expiry day
+  const gone = c.licenceState({ '20B': '2026-10-17', '21B': null }, today);
+  assert.deepEqual([gone.state, gone.daysLeft], ['expired', -5]);
+  assert.equal(c.licenceState({ '20B': null }, today).state, 'missing');
+});
+
+test('validateCustomValues cleans and explains', () => {
+  const defs = [
+    { key: 'storage', label: 'Storage', type: 'CHOICE', options: ['Room temperature', 'Fridge (2–8 °C)'] },
+    { key: 'pack_weight', label: 'Pack weight', type: 'NUMBER' },
+    { key: 'cold_chain', label: 'Cold chain', type: 'YESNO' },
+    { key: 'launch', label: 'Launch date', type: 'DATE' },
+    { key: 'old', label: 'Old', type: 'TEXT', active: false },
+  ];
+  const ok = c.validateCustomValues(defs, { storage: 'room temperature', pack_weight: '1,250', cold_chain: 'yes', launch: '2026-01-15' }, { old: 'kept' });
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.clean, { old: 'kept', storage: 'Room temperature', pack_weight: 1250, cold_chain: true, launch: '2026-01-15' });
+  const bad = c.validateCustomValues(defs, { storage: 'Freezer', pack_weight: 'abc', nope: 1 });
+  assert.equal(bad.ok, false);
+  assert.equal(bad.errors.length, 3);
+  const cleared = c.validateCustomValues(defs, { storage: '' }, { storage: 'Room temperature' });
+  assert.deepEqual(cleared.clean, {});
+  const req = c.validateCustomValues([{ key: 'x1', label: 'Shop type', type: 'TEXT', required: true }], {});
+  assert.deepEqual(req.errors, ['Shop type is required.']);
+});
+
+test('field keys, aliases, barcodes and blocked messages', () => {
+  assert.equal(c.fieldKeyFrom('Same-day order cut-off'), 'same_day_order_cut_off');
+  assert.equal(c.fieldKeyFrom('2nd phone'), 'f_2nd_phone');
+  assert.equal(c.normalizeAlias('  Dolo   650 '), 'dolo 650');
+  assert.equal(c.normalizeAlias('డోలో'), 'డోలో');
+  assert.equal(c.isValidAlias('a'), false);
+  assert.equal(c.isValidBarcode('8901234567890'), true);
+  assert.equal(c.isValidBarcode('12 34'), false);
+  assert.equal(c.productBlockedMessage('Pan 40', 'ACTIVE'), null);
+  assert.match(c.productBlockedMessage('Pan 40', 'RECALLED', 'Batch P123 only.'), /recalled.*Batch P123/);
+  assert.equal(c.canOrderProduct('BANNED'), false);
+});

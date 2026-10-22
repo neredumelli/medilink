@@ -17,6 +17,14 @@ export interface StockRow {
   scheme?: string; // "10+1"
   nearestExpiry?: string; // YYYY-MM-DD or YYYY-MM
   barcode?: string;
+  batches?: { batchNo: string; expiry: string; qty: number; mrp?: number }[];
+}
+
+/** "2027-03" → 1 Mar 2027 (UTC date); invalid → null */
+function toDate(s?: string): Date | null {
+  if (!s) return null;
+  const d = new Date(`${s.length === 7 ? `${s}-01` : s}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 /** Auto-map a new distributor item to a master product only when we are confident. */
@@ -42,15 +50,15 @@ export class SyncService {
 
   /** Upserts stock, price, scheme and expiry. Items not seen before are mapped to master products when confident. */
   async pushStock(agent: AgentWithDistributor, rows: StockRow[]) {
-    const catalog = await this.prisma.product.findMany({ select: { id: true, name: true, salt: true, company: true, barcode: true, pack: true } });
-    const byBarcode = new Map(catalog.filter((p) => p.barcode).map((p) => [p.barcode!, p.id]));
+    const catalog = await this.prisma.product.findMany({ where: { status: { not: 'DISCONTINUED' } }, select: { id: true, name: true, salt: true, company: true, pack: true } });
+    const byBarcode = new Map((await this.prisma.productBarcode.findMany()).map((b) => [b.code, b.productId]));
     let created = 0;
     let updated = 0;
     let unmapped = 0;
 
     for (const r of rows) {
       const scheme = parseScheme(r.scheme);
-      const expiry = r.nearestExpiry ? new Date(r.nearestExpiry.length === 7 ? `${r.nearestExpiry}-01` : r.nearestExpiry) : null;
+      const expiry = toDate(r.nearestExpiry);
       const data = {
         externalName: r.name,
         stockQty: Math.max(0, Math.floor(r.stockQty)),
@@ -59,12 +67,15 @@ export class SyncService {
         discountPct: Math.min(100, Math.max(0, r.discountPct ?? 0)),
         schemeBuy: scheme?.buy ?? null,
         schemeFree: scheme?.free ?? null,
-        nearestExpiry: expiry && !Number.isNaN(expiry.getTime()) ? expiry : null,
+        // With batches, the database works out the nearest expiry from them.
+        ...(r.batches ? {} : { nearestExpiry: expiry }),
         stockUpdatedAt: new Date(),
       };
       const existing = await this.prisma.distributorItem.findUnique({ where: { distributorId_externalCode: { distributorId: agent.distributorId, externalCode: r.externalCode } } });
+      let itemId: string;
       if (existing) {
         await this.prisma.distributorItem.update({ where: { id: existing.id }, data });
+        itemId = existing.id;
         updated++;
       } else {
         let productId: string | null = r.barcode ? byBarcode.get(r.barcode) ?? null : null;
@@ -80,13 +91,34 @@ export class SyncService {
           if (confidence < AUTO_MAP_MIN_SCORE) productId = null;
         }
         if (!productId) unmapped++;
-        await this.prisma.distributorItem.create({ data: { ...data, distributorId: agent.distributorId, externalCode: r.externalCode, productId, mapConfidence: confidence || null } });
+        const item = await this.prisma.distributorItem.create({ data: { ...data, distributorId: agent.distributorId, externalCode: r.externalCode, productId, mapConfidence: confidence || null } });
+        itemId = item.id;
         created++;
       }
+      if (r.batches) await this.replaceBatches(itemId, r.batches);
     }
     await this.prisma.syncAgent.update({ where: { id: agent.id }, data: { lastStockSyncAt: new Date(), lastHeartbeatAt: new Date() } });
     this.logger.log(`${agent.distributor.code}: stock ${updated} updated, ${created} new, ${unmapped} waiting for mapping`);
     return { updated, created, unmapped };
+  }
+
+  /** Replaces an item's batches with what the billing software reports; the database recalculates the nearest expiry. */
+  private async replaceBatches(distributorItemId: string, batches: NonNullable<StockRow['batches']>) {
+    const valid = batches.map((b) => ({ ...b, date: toDate(b.expiry) })).filter((b) => b.date);
+    if (valid.length === 0) {
+      await this.prisma.$transaction([this.prisma.itemBatch.deleteMany({ where: { distributorItemId } }), this.prisma.distributorItem.update({ where: { id: distributorItemId }, data: { nearestExpiry: null } })]);
+      return;
+    }
+    await this.prisma.$transaction([
+      this.prisma.itemBatch.deleteMany({ where: { distributorItemId, batchNo: { notIn: valid.map((b) => b.batchNo) } } }),
+      ...valid.map((b) =>
+        this.prisma.itemBatch.upsert({
+          where: { distributorItemId_batchNo: { distributorItemId, batchNo: b.batchNo } },
+          create: { distributorItemId, batchNo: b.batchNo, expiry: b.date!, stockQty: Math.max(0, Math.floor(b.qty)), mrpPaise: b.mrp !== undefined ? rupeesToPaise(b.mrp) : null },
+          update: { expiry: b.date!, stockQty: Math.max(0, Math.floor(b.qty)), mrpPaise: b.mrp !== undefined ? rupeesToPaise(b.mrp) : null },
+        }),
+      ),
+    ]);
   }
 
   /** New orders not yet written into the billing software. */

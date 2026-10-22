@@ -7,3 +7,4 @@ export * from './orderStatus';
 export * from './i18n';
 export * from './tokens';
 export * from './roles';
+export * from './dataRules';

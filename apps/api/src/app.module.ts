@@ -21,6 +21,8 @@ import { SyncService } from './sync/sync.service';
 import { AgentGuard } from './sync/agent.guard';
 import { AdminController } from './admin/admin.controller';
 import { AdminService } from './admin/admin.service';
+import { DataController } from './admin/data.controller';
+import { DataService } from './admin/data.service';
 import { HealthController } from './health.controller';
 import { PublicController } from './public.controller';
 import { SettingsService } from './common/settings.service';
@@ -30,7 +32,7 @@ import { RequestRefMiddleware } from './common/request-ref';
 
 @Module({
   imports: [JwtModule.register({}), ThrottlerModule.forRoot({ throttlers: [{ ttl: 60_000, limit: 300 }], skipIf: () => process.env.NODE_ENV === 'test' })],
-  controllers: [HealthController, PublicController, AuthController, CatalogController, ShopController, DistributorController, SyncController, AdminController],
+  controllers: [HealthController, PublicController, AuthController, CatalogController, ShopController, DistributorController, SyncController, AdminController, DataController],
   providers: [
     PrismaService,
     AuditService,
@@ -44,6 +46,7 @@ import { RequestRefMiddleware } from './common/request-ref';
     SyncService,
     AgentGuard,
     AdminService,
+    DataService,
     SettingsService,
     // Order matters: rate limit, then authentication, then role checks.
     { provide: APP_GUARD, useClass: ThrottlerGuard },

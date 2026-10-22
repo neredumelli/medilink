@@ -1,17 +1,31 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { OrderSource, Prisma } from '@prisma/client';
-import { billedRate, freeQty, orderTotals, parseOrderList, pickBest } from '@medilink/core';
+import { billedRate, freeQty, licenceState, orderTotals, parseOrderList, pickBest, productBlockedMessage } from '@medilink/core';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../common/audit.service';
 import { NotifyService } from '../common/notify.service';
 import { AuthUser } from '../common/auth';
-import { CatalogService } from '../catalog/catalog.service';
+import { CatalogService, todayDate } from '../catalog/catalog.service';
 import { OrderWorkflowService } from '../orders/order-workflow.service';
 
 export interface PlaceResult {
   orders: { id: string; number: string; distributorName: string; totalPaise: number }[];
   totalPaise: number;
   timeToPlaceSec: number | null;
+}
+
+const fmtDate = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+/** The shop's drug licences (20B/21B): ordering stops the day after the first one expires. */
+export function shopLicence(r: { dl20bExpiry: Date | null; dl21bExpiry: Date | null }) {
+  const st = licenceState({ '20B': r.dl20bExpiry, '21B': r.dl21bExpiry });
+  const message =
+    st.state === 'expired'
+      ? `Your drug licence (${st.which}) expired on ${fmtDate(st.expiresOn!)}. Send the renewed licence to MediLink support to keep ordering.`
+      : st.state === 'expiring'
+        ? `Your drug licence (${st.which}) expires on ${fmtDate(st.expiresOn!)}${st.daysLeft === 0 ? ' (today)' : ` (in ${st.daysLeft} day${st.daysLeft === 1 ? '' : 's'})`}. Renew it so ordering does not stop.`
+        : null;
+  return { ...st, message };
 }
 
 @Injectable()
@@ -36,8 +50,9 @@ export class ShopService {
       this.prisma.order.findFirst({ where: { retailerId, status: { in: ['PLACED', 'ACCEPTED', 'BILLED', 'DISPATCHED'] } }, orderBy: { createdAt: 'desc' }, include: { distributor: true, _count: { select: { items: true } } } }),
     ]);
     const creditFree = [...credit.values()].reduce((a, c) => a + Math.max(0, c.available), 0);
+    const licence = shopLicence(retailer);
     return {
-      shop: { name: retailer.name, area: retailer.area, kycStatus: retailer.kycStatus, canOrder: retailer.kycStatus === 'APPROVED' },
+      shop: { name: retailer.name, area: retailer.area, kycStatus: retailer.kycStatus, canOrder: retailer.kycStatus === 'APPROVED' && licence.state !== 'expired', licence },
       chips: { onTheWay, creditFreePaise: creditFree, shortageCount: shortage },
       usual: prefs.map((p) => ({ productId: p.productId, name: p.product.name, category: p.product.category, usualQty: p.usualQty })),
       lastDelivered: lastDelivered && {
@@ -79,8 +94,10 @@ export class ShopService {
             lines: [],
           })
           .get(r.distributorId);
+      const blockedMsg = productBlockedMessage(r.product.name, r.product.status, r.product.statusNote);
       g.lines.push({
         productId: r.productId,
+        blocked: blockedMsg,
         name: r.product.name,
         pack: r.product.pack,
         category: r.product.category,
@@ -92,11 +109,11 @@ export class ShopService {
         valuePaise: (offer?.billedRatePaise ?? 0) * r.qty,
         stockQty: offer?.stockQty ?? 0,
         shortExpiry: offer?.shortExpiry ?? false,
-        unavailable: !offer || offer.stockQty === 0,
+        unavailable: !!blockedMsg || !offer || offer.stockQty === 0,
         alternatives: (offers.get(r.productId) ?? []).filter((o) => o.stockQty > 0).map((o) => ({ distributorId: o.distributorId, name: o.distributorName, netRatePaise: o.netRatePaise })),
       });
     }
-    let blocked = false;
+    let blocked = rows.some((r) => r.product.status !== 'ACTIVE');
     const out = [...groups.values()].map((g) => {
       const totals = orderTotals(g.lines.map((l: any) => ({ ratePaise: l.ratePaise, qty: l.qty, gstPct: l.gstPct })));
       const overCredit = totals.total > g.creditAvailablePaise;
@@ -111,6 +128,8 @@ export class ShopService {
   async setCartItem(retailerId: string, productId: string, qty: number, distributorId?: string) {
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!product) throw new NotFoundException('Medicine not found');
+    const blockedMsg = productBlockedMessage(product.name, product.status, product.statusNote);
+    if (blockedMsg) throw new ConflictException(blockedMsg);
     const offers = (await this.catalog.offersFor(retailerId, [productId])).get(productId) ?? [];
     let chosen: string;
     if (distributorId) {
@@ -140,6 +159,10 @@ export class ShopService {
     for (const it of items) {
       const product = await this.prisma.product.findUnique({ where: { id: it.productId } });
       if (!product) continue;
+      if (product.status !== 'ACTIVE') {
+        missing.push(product.name);
+        continue;
+      }
       const offers = (await this.catalog.offersFor(retailerId, [it.productId])).get(it.productId) ?? [];
       const best = pickBest(CatalogService.toCoreOffers(it.productId, offers), it.qty, { exclude: excludeDistributorId ? [excludeDistributorId] : [], gstPct: product.gstPct });
       if (!best) {
@@ -225,6 +248,8 @@ export class ShopService {
     }
     const retailer = await this.prisma.retailer.findUniqueOrThrow({ where: { id: retailerId } });
     if (retailer.kycStatus !== 'APPROVED') throw new ForbiddenException('Your shop documents are still being checked. You can order as soon as they are approved.');
+    const licence = shopLicence(retailer);
+    if (licence.state === 'expired') throw new ForbiddenException({ message: licence.message, licenceExpired: true });
     if (user.role === 'RETAILER_STAFF') throw new ForbiddenException('Only the shop owner can place orders. Add items to the shortage list instead.');
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -236,6 +261,10 @@ export class ShopService {
       }
       const cart = await tx.cartItem.findMany({ where: { retailerId }, include: { product: true } });
       if (cart.length === 0) throw new BadRequestException('Your cart is empty');
+      for (const c of cart) {
+        const msg = productBlockedMessage(c.product.name, c.product.status, c.product.statusNote);
+        if (msg) throw new ConflictException(`${msg} Please remove it from your cart.`);
+      }
 
       const byDist = new Map<string, typeof cart>();
       cart.forEach((c) => byDist.set(c.distributorId, [...(byDist.get(c.distributorId) ?? []), c]));
@@ -244,6 +273,9 @@ export class ShopService {
       for (const [distributorId, lines] of byDist) {
         const link = await tx.retailerDistributorLink.findUnique({ where: { retailerId_distributorId: { retailerId, distributorId } }, include: { distributor: true } });
         if (!link || link.status !== 'LINKED') throw new ConflictException('One of the distributors in your cart is not linked to your shop');
+        if (link.distributor.drugLicenceExpiry && link.distributor.drugLicenceExpiry < todayDate()) {
+          throw new ConflictException(`${link.distributor.name} cannot take orders right now (their licence renewal is pending). Please pick another distributor in your cart.`);
+        }
 
         const items = [];
         for (const c of lines) {
