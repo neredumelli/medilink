@@ -43,7 +43,8 @@ jobs:
         run: pnpm --filter @medilink/api typecheck 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; grep -iE "error|fail|⨯|warn|cannot|unable" /tmp/out.txt | head -40 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done || true; exit $code
       - name: API end-to-end test
         if: always()
-        run: pnpm --filter @medilink/api test
+        shell: bash
+        run: pnpm --filter @medilink/api test 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; grep -E "✕|●|Expected|Received|expected|Error" /tmp/out.txt | head -40 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done || true; exit $code
       - name: API build
         if: always()
         run: pnpm --filter @medilink/api build

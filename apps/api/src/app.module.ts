@@ -24,7 +24,7 @@ import { AdminService } from './admin/admin.service';
 import { HealthController } from './health.controller';
 
 @Module({
-  imports: [JwtModule.register({}), ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }])],
+  imports: [JwtModule.register({}), ThrottlerModule.forRoot({ throttlers: [{ ttl: 60_000, limit: 300 }], skipIf: () => process.env.NODE_ENV === 'test' })],
   controllers: [HealthController, AuthController, CatalogController, ShopController, DistributorController, SyncController, AdminController],
   providers: [
     PrismaService,
