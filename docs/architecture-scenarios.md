@@ -240,7 +240,13 @@ One pipeline for products, shops, distributors, price lists, schemes, stock, ope
 | Load | JMeter peak tests | ⏳ P5 |
 | Usability | 5 shop owners + 3 distributor staff before launch | ⏳ |
 
-## 13. Build order
+## 13. Known gaps found in review
+| Gap | Fix | When |
+|---|---|---|
+| Some small labels stay in English on Telugu/Hindi screens (tile subtitles, "Latest order", "items") | Move every remaining label into the translation file; automated check that no screen text is hard-coded | Next round |
+| UI screenshots and design book | Regenerated automatically from the real app (`Screenshots` workflow + `tools/design-book`) | ✅ |
+
+## 14. Build order
 
 1. Upload the pending test fix (rate limit off in tests)
 2. **Friendly failure screens:** error boundary + reference codes, offline vs down, maintenance mode, minimum app version, timeouts
