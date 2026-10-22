@@ -1,5 +1,6 @@
 /* Layout: slim role switch on top. Shop = phone-width app: green header band with greeting, today's status and the search box, colourful action tiles, simple product cards, bottom tab bar. Distributor = order lanes (New → To bill → To dispatch → On the way). Admin = colour KPI tiles + panels. */
 :root{
+  --font-baloo:"Baloo 2"; --font-baloo-te:"Baloo Tammudu 2"; --font-nunito:"Nunito";
   --bg:#F4F7F1; --surface:#FFFFFF; --sunk:#EDF2E9; --ink:#10231A; --muted:#5B6E63; --line:#DFE7DA;
   --band:#0E9F5E; --band-2:#0B8A51; --band-ink:#FFFFFF;
   --brand:#0E9F5E; --brand-strong:#08744A; --brand-ink:#FFFFFF; --brand-soft:#DCF5E7;
