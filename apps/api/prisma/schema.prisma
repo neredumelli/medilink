@@ -1,0 +1,453 @@
+// MediLink data model. Money is stored as integer paise (Int) — ₹21.43 = 2143.
+// Limits: an Int column holds up to ₹2.1 crore, which covers any single order or shop credit line.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pg_trgm]
+}
+
+// ---------------------------------------------------------------- enums
+enum Role {
+  SUPER_ADMIN
+  ADMIN_OPS
+  SUPPORT
+  CALL_CENTER
+  DISTRIBUTOR_ADMIN
+  DISTRIBUTOR_STAFF
+  RETAILER_OWNER
+  RETAILER_STAFF
+  SALES_REP
+}
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum KycStatus {
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
+  REJECTED
+}
+
+enum LinkStatus {
+  PENDING
+  LINKED
+  DECLINED
+}
+
+enum BillingSoftware {
+  MARG
+  TALLY
+  BUSY
+  GOFRUGAL
+  CSV
+  API
+}
+
+enum Schedule {
+  NONE
+  H
+  H1
+  X
+}
+
+enum Category {
+  FEVER_PAIN
+  GASTRO
+  ANTIBIOTIC
+  CARDIAC
+  DIABETES_THYROID
+  ALLERGY_RESPIRATORY
+  VITAMINS
+  OTHER
+}
+
+enum OrderStatus {
+  PLACED
+  ACCEPTED
+  BILLED
+  DISPATCHED
+  DELIVERED
+  REJECTED
+  CANCELLED
+}
+
+enum OrderSource {
+  APP
+  WEB
+  WHATSAPP
+  CALL_CENTER
+  SALES_REP
+  UPLOAD
+}
+
+enum ActorType {
+  RETAILER
+  DISTRIBUTOR
+  SYNC_AGENT
+  ADMIN
+  SYSTEM
+}
+
+// ---------------------------------------------------------------- people & businesses
+model User {
+  id            String     @id @default(uuid()) @db.Uuid
+  userCode      String     @unique // e.g. MLR-20417 — shown to the user as their ID
+  mobile        String     @unique @db.VarChar(10)
+  name          String
+  role          Role
+  status        UserStatus @default(PENDING)
+  lang          String     @default("en") @db.VarChar(2)
+  retailerId    String?    @db.Uuid
+  distributorId String?    @db.Uuid
+  termsAcceptedAt DateTime?
+  termsVersion  String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  retailer    Retailer?    @relation(fields: [retailerId], references: [id])
+  distributor Distributor? @relation(fields: [distributorId], references: [id])
+  sessions    Session[]
+  shortageAdds ShortageItem[]
+
+  @@index([retailerId])
+  @@index([distributorId])
+}
+
+model Retailer {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String
+  area      String
+  city      String    @default("Hyderabad")
+  pincode   String    @db.VarChar(6)
+  address   String
+  gstin     String?   @unique @db.VarChar(15)
+  dl20b     String?
+  dl21b     String?
+  pan       String?   @db.VarChar(10)
+  lat       Float?
+  lng       Float?
+  kycStatus KycStatus @default(PENDING)
+  kycNote   String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  users     User[]
+  links     RetailerDistributorLink[]
+  orders    Order[]
+  cart      CartItem[]
+  shortages ShortageItem[]
+  prefs     RetailerProductPref[]
+  documents KycDocument[]
+}
+
+model Distributor {
+  id              String          @id @default(uuid()) @db.Uuid
+  code            String          @unique @db.VarChar(6) // invoice prefix, e.g. SVP
+  name            String
+  area            String
+  city            String          @default("Hyderabad")
+  address         String
+  gstin           String?         @unique @db.VarChar(15)
+  drugLicence     String?
+  billingSoftware BillingSoftware @default(CSV)
+  deliveryLabel   String          @default("Today") // shown to shops, e.g. "Today, ~3 hrs"
+  etaHours        Int             @default(6)
+  kycStatus       KycStatus       @default(PENDING)
+  kycNote         String?
+  invoiceSeq      Int             @default(0)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  users     User[]
+  links     RetailerDistributorLink[]
+  items     DistributorItem[]
+  orders    Order[]
+  cart      CartItem[]
+  syncAgent SyncAgent?
+  documents KycDocument[]
+}
+
+model KycDocument {
+  id            String    @id @default(uuid()) @db.Uuid
+  retailerId    String?   @db.Uuid
+  distributorId String?   @db.Uuid
+  kind          String // GST_CERT, DL_20B, DL_21B, PAN, WHOLESALE_DL
+  fileUrl       String
+  verified      Boolean   @default(false)
+  expiresOn     DateTime? @db.Date
+  createdAt     DateTime  @default(now())
+
+  retailer    Retailer?    @relation(fields: [retailerId], references: [id], onDelete: Cascade)
+  distributor Distributor? @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+}
+
+model RetailerDistributorLink {
+  id               String     @id @default(uuid()) @db.Uuid
+  retailerId       String     @db.Uuid
+  distributorId    String     @db.Uuid
+  status           LinkStatus @default(PENDING)
+  partyCode        String? // the shop's code inside the distributor's billing software
+  creditLimitPaise Int        @default(0)
+  /// dues synced from the distributor's billing software
+  outstandingPaise Int        @default(0)
+  /// value of open orders not yet billed (reserved when placed, released when billed/rejected)
+  reservedPaise    Int        @default(0)
+  creditDays       Int        @default(30)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  retailer    Retailer    @relation(fields: [retailerId], references: [id], onDelete: Cascade)
+  distributor Distributor @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+
+  @@unique([retailerId, distributorId])
+  @@index([distributorId, status])
+}
+
+// ---------------------------------------------------------------- catalogue & stock
+model Product {
+  id         String   @id @default(uuid()) @db.Uuid
+  name       String
+  form       String   @db.VarChar(16) // Tab, Cap, Syp, Gel, Inj
+  pack       String   @db.VarChar(24) // 15s, 30 g
+  salt       String
+  company    String
+  hsn        String?  @db.VarChar(8)
+  gstPct     Int      @default(5)
+  schedule   Schedule @default(NONE)
+  category   Category @default(OTHER)
+  mrpPaise   Int
+  barcode    String?  @unique
+  /// lower-case "name salt company" used by trigram search
+  searchText String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  items    DistributorItem[]
+  cart     CartItem[]
+  orderItems OrderItem[]
+  shortages ShortageItem[]
+  prefs    RetailerProductPref[]
+
+  @@index([searchText(ops: raw("gin_trgm_ops"))], type: Gin, map: "Product_searchText_trgm_idx")
+}
+
+/// A distributor's own item (as named in their billing software), mapped to a master Product.
+model DistributorItem {
+  id             String    @id @default(uuid()) @db.Uuid
+  distributorId  String    @db.Uuid
+  productId      String?   @db.Uuid // null until mapped
+  externalCode   String // item code in Marg/Tally/Busy
+  externalName   String
+  stockQty       Int       @default(0)
+  ptrPaise       Int
+  mrpPaise       Int?
+  discountPct    Float     @default(0)
+  schemeBuy      Int?
+  schemeFree     Int?
+  nearestExpiry  DateTime? @db.Date
+  mapConfidence  Int?
+  stockUpdatedAt DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  distributor Distributor @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+  product     Product?    @relation(fields: [productId], references: [id])
+  orderItems  OrderItem[]
+
+  @@unique([distributorId, externalCode])
+  @@index([productId])
+  @@index([distributorId, productId])
+}
+
+// ---------------------------------------------------------------- shop working data
+model CartItem {
+  id            String   @id @default(uuid()) @db.Uuid
+  retailerId    String   @db.Uuid
+  productId     String   @db.Uuid
+  distributorId String   @db.Uuid
+  qty           Int
+  /// true when the shop picked this distributor; false when Best price chose it
+  pinned        Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  retailer    Retailer    @relation(fields: [retailerId], references: [id], onDelete: Cascade)
+  product     Product     @relation(fields: [productId], references: [id])
+  distributor Distributor @relation(fields: [distributorId], references: [id])
+
+  @@unique([retailerId, productId])
+}
+
+model ShortageItem {
+  id         String   @id @default(uuid()) @db.Uuid
+  retailerId String   @db.Uuid
+  productId  String   @db.Uuid
+  qty        Int
+  addedById  String?  @db.Uuid
+  createdAt  DateTime @default(now())
+
+  retailer Retailer @relation(fields: [retailerId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id])
+  addedBy  User?    @relation(fields: [addedById], references: [id])
+
+  @@unique([retailerId, productId])
+}
+
+model RetailerProductPref {
+  retailerId     String  @db.Uuid
+  productId      String  @db.Uuid
+  usualQty       Int     @default(10)
+  notifyWhenBack Boolean @default(false)
+  orderCount     Int     @default(0)
+
+  retailer Retailer @relation(fields: [retailerId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id])
+
+  @@id([retailerId, productId])
+}
+
+// ---------------------------------------------------------------- orders
+model Order {
+  id            String      @id @default(uuid()) @db.Uuid
+  number        String      @unique // ML-10241
+  retailerId    String      @db.Uuid
+  distributorId String      @db.Uuid
+  status        OrderStatus @default(PLACED)
+  source        OrderSource @default(APP)
+  placedById    String?     @db.Uuid
+  subtotalPaise Int
+  gstPaise      Int
+  totalPaise    Int
+  partial       Boolean     @default(false)
+  invoiceNo     String?
+  rejectReason  String?
+  erpRef        String? // sales-order / bill reference in the distributor's software
+  erpPulledAt   DateTime? // when the sync agent picked it up
+  timeToPlaceSec Int?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  retailer    Retailer     @relation(fields: [retailerId], references: [id])
+  distributor Distributor  @relation(fields: [distributorId], references: [id])
+  items       OrderItem[]
+  events      OrderEvent[]
+
+  @@index([distributorId, status, createdAt])
+  @@index([retailerId, createdAt])
+}
+
+model OrderItem {
+  id                String  @id @default(uuid()) @db.Uuid
+  orderId           String  @db.Uuid
+  productId         String  @db.Uuid
+  distributorItemId String  @db.Uuid
+  qty               Int
+  freeQty           Int     @default(0)
+  ratePaise         Int // billed rate after trade discount
+  gstPct            Int
+  billedQty         Int?
+
+  order           Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product         Product         @relation(fields: [productId], references: [id])
+  distributorItem DistributorItem @relation(fields: [distributorItemId], references: [id])
+
+  @@index([orderId])
+}
+
+model OrderEvent {
+  id        String      @id @default(uuid()) @db.Uuid
+  orderId   String      @db.Uuid
+  status    OrderStatus
+  actorType ActorType
+  actorId   String?     @db.Uuid
+  note      String?
+  createdAt DateTime    @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+// ---------------------------------------------------------------- auth & security
+model OtpChallenge {
+  id         String    @id @default(uuid()) @db.Uuid
+  mobile     String    @db.VarChar(10)
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([mobile, createdAt])
+}
+
+model Session {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique
+  deviceName String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model SyncAgent {
+  id              String          @id @default(uuid()) @db.Uuid
+  distributorId   String          @unique @db.Uuid
+  keyPrefix       String          @unique @db.VarChar(12) // shown in the admin panel, e.g. mlk_svp_3f9a
+  keyHash         String // sha256 of the full key; the key itself is shown once
+  software        BillingSoftware
+  version         String?
+  lastHeartbeatAt DateTime?
+  lastStockSyncAt DateTime?
+  errorCount24h   Int             @default(0)
+  revokedAt       DateTime?
+  createdAt       DateTime        @default(now())
+
+  distributor Distributor @relation(fields: [distributorId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id         String    @id @default(uuid()) @db.Uuid
+  actorId    String?   @db.Uuid
+  actorLabel String
+  action     String // e.g. order.accept, kyc.approve, link.approve
+  entity     String
+  entityId   String?
+  before     Json?
+  after      Json?
+  ip         String?
+  createdAt  DateTime  @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}
+
+/// Outbox for SMS / WhatsApp / push. A worker delivers and marks them sent.
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String?   @db.Uuid
+  mobile    String?   @db.VarChar(10)
+  channel   String // SMS, WHATSAPP, PUSH, EMAIL
+  template  String
+  payload   Json
+  sentAt    DateTime?
+  error     String?
+  createdAt DateTime  @default(now())
+
+  @@index([sentAt])
+}

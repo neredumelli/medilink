@@ -1,0 +1,16 @@
+{
+  "name": "@medilink/core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Business rules shared by API, web and mobile: pricing, best price, search, list reading, GSTIN, order status, translations, design tokens.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3"
+  }
+}

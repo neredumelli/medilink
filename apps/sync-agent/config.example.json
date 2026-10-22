@@ -1,0 +1,17 @@
+{
+  "apiUrl": "https://api.medilink.example/api",
+  "key": "mlk_xxx_paste_the_key_from_medilink_support",
+  "intervalSeconds": 60,
+  "fullStockMinutes": 60,
+  "csv": {
+    "stockFile": "C:\\MediLink\\export\\stock.csv",
+    "outstandingFile": "C:\\MediLink\\export\\outstanding.csv",
+    "ordersOutDir": "C:\\MediLink\\import\\orders",
+    "billsInDir": "C:\\MediLink\\export\\bills",
+    "columns": {
+      "stock": { "code": "item code", "name": "item name", "qty": "stock", "ptr": "ptr", "mrp": "mrp", "discount": "discount %", "scheme": "scheme", "expiry": "expiry", "barcode": "barcode" },
+      "outstanding": { "party": "party code", "amount": "outstanding" },
+      "bill": { "order": "medilink order", "invoice": "invoice no", "code": "item code", "qty": "billed qty" }
+    }
+  }
+}

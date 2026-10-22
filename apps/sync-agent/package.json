@@ -1,0 +1,14 @@
+{
+  "name": "@medilink/sync-agent",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Runs on the distributor's billing PC. Sends stock to MediLink and puts MediLink orders into the billing software. Zero dependencies: needs only Node.js 20+.",
+  "type": "module",
+  "bin": { "medilink-agent": "src/main.mjs" },
+  "scripts": {
+    "start": "node src/main.mjs",
+    "once": "node src/main.mjs --once",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": { "node": ">=20" }
+}

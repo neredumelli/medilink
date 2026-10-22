@@ -1,0 +1,12 @@
+node_modules
+dist
+.next
+.expo
+.turbo
+coverage
+*.log
+.env
+.env.local
+apps/sync-agent/state.json
+apps/sync-agent/inbox/*.csv
+!apps/sync-agent/inbox/.gitkeep

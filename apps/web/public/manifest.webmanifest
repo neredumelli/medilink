@@ -1,0 +1,10 @@
+{
+  "name": "MediLink",
+  "short_name": "MediLink",
+  "description": "Order medicines from all your distributors in one place.",
+  "start_url": "/shop",
+  "display": "standalone",
+  "background_color": "#F4F7F1",
+  "theme_color": "#0E9F5E",
+  "icons": []
+}

@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "MediLink",
+    "slug": "medilink-shop",
+    "scheme": "medilink",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": { "backgroundColor": "#0E9F5E", "resizeMode": "contain" },
+    "ios": {
+      "bundleIdentifier": "in.medilink.shop",
+      "supportsTablet": true,
+      "associatedDomains": ["applinks:app.medilink.example"],
+      "infoPlist": {
+        "NSCameraUsageDescription": "MediLink uses the camera to scan medicine strips and barcodes so you can order faster.",
+        "NSFaceIDUsageDescription": "Use Face ID to open MediLink quickly.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "in.medilink.shop",
+      "adaptiveIcon": { "backgroundColor": "#0E9F5E" },
+      "permissions": ["CAMERA", "USE_BIOMETRIC"],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "app.medilink.example", "pathPrefix": "/o" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-local-authentication",
+      ["expo-camera", { "cameraPermission": "MediLink uses the camera to scan medicine strips and barcodes so you can order faster." }],
+      ["expo-notifications", { "color": "#0E9F5E" }]
+    ],
+    "experiments": { "typedRoutes": true },
+    "extra": { "eas": { "projectId": "REPLACE_WITH_EAS_PROJECT_ID" } }
+  }
+}
