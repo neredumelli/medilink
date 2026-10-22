@@ -9,6 +9,7 @@ permissions:
 jobs:
   shoot:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16-alpine
@@ -38,6 +39,7 @@ jobs:
           for i in $(seq 1 60); do curl -sf http://localhost:4000/api/health >/dev/null && curl -sf http://localhost:3000/login >/dev/null && break; sleep 2; done
           curl -sf http://localhost:4000/api/health
       - name: Capture
+        timeout-minutes: 8
         working-directory: tools/screenshots
         shell: bash
         run: |

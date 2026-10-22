@@ -1,0 +1,118 @@
+<title>MediLink Design Book</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito:wght@400;600;700;800&display=swap">
+<style>
+/* Layout: green header band with the book's purpose and two big section links; Screens as a phone-shot grid grouped by user; Flows as numbered diagram cards with a sticky contents list on wide screens. */
+:root{
+  --bg:#F4F7F1; --surface:#FFFFFF; --sunk:#EDF2E9; --ink:#10231A; --muted:#5B6E63; --line:#DFE7DA;
+  --band:#0E9F5E; --band-2:#0B8A51; --band-ink:#FFFFFF; --brand:#0E9F5E; --brand-strong:#08744A; --brand-soft:#DCF5E7;
+  --sun:#FFB21E; --sun-soft:#FFF0CC; --sun-ink:#6A4300; --sky:#1B83F0; --sky-soft:#DDEDFF;
+  --f-display:"Baloo 2","Nunito",system-ui,sans-serif; --f-body:"Nunito",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --shadow:0 1px 2px rgba(16,35,26,.06),0 8px 22px rgba(16,35,26,.08);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0B1510; --surface:#13211A; --sunk:#1A2B22; --ink:#EAF4EE; --muted:#9AB0A4; --line:#26392F;
+  --band:#115C3B; --band-2:#0E4D31; --band-ink:#F2FFF7; --brand:#2FCF89; --brand-strong:#4CE09D; --brand-soft:#123A27;
+  --sun:#FFC34D; --sun-soft:#3A2C0D; --sun-ink:#FFD88A; --sky:#5FB0FF; --sky-soft:#132A42; --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 22px rgba(0,0,0,.3); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0B1510; --surface:#13211A; --sunk:#1A2B22; --ink:#EAF4EE; --muted:#9AB0A4; --line:#26392F;
+  --band:#115C3B; --band-2:#0E4D31; --band-ink:#F2FFF7; --brand:#2FCF89; --brand-strong:#4CE09D; --brand-soft:#123A27;
+  --sun:#FFC34D; --sun-soft:#3A2C0D; --sun-ink:#FFD88A; --sky:#5FB0FF; --sky-soft:#132A42; --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 22px rgba(0,0,0,.3); color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5}
+h1,h2,h3{font-family:var(--f-display);margin:0;line-height:1.15;text-wrap:balance}
+a{color:var(--brand-strong)}
+:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.band{background:linear-gradient(160deg,var(--band),var(--band-2));color:var(--band-ink);padding-block:36px 40px}
+.band .eyebrow{font-weight:800;letter-spacing:.08em;text-transform:uppercase;font-size:12px;opacity:.85}
+.band h1{font-size:clamp(32px,5vw,52px);font-weight:800;margin-top:6px}
+.band p{max-width:62ch;margin:10px 0 0;opacity:.92;font-size:17px}
+.jump{display:flex;flex-wrap:wrap;gap:12px;margin-top:22px}
+.jump a{display:inline-flex;align-items:center;gap:10px;background:var(--surface);color:var(--ink);text-decoration:none;border-radius:16px;padding:12px 18px;font-weight:800;box-shadow:var(--shadow)}
+.jump a b{font-family:var(--f-display);font-size:22px;color:var(--brand-strong)}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;font-size:14px}
+.legend span{background:rgba(255,255,255,.16);border-radius:999px;padding:4px 12px;font-weight:700}
+main{padding-block:30px 60px;display:flex;flex-direction:column;gap:48px}
+.sec-h{display:flex;flex-direction:column;gap:6px;margin-bottom:18px}
+.sec-h h2{font-size:clamp(26px,3.4vw,36px);font-weight:800}
+.sec-h p{margin:0;color:var(--muted);max-width:70ch}
+.group{margin-top:28px}
+.group-h{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 14px;margin-bottom:14px}
+.group-h h3{font-size:22px;font-weight:800}
+.group-h p{margin:0;color:var(--muted)}
+.grid{display:grid;gap:18px}
+.grid.phones{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.grid.wides{grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr))}
+.shot{margin:0;background:var(--surface);border-radius:20px;box-shadow:var(--shadow);overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.zoom{border:0;padding:0;margin:0;background:var(--sunk);cursor:zoom-in;display:block;width:100%}
+.shot.phone .zoom{height:420px;overflow:hidden}
+.shot.wide .zoom{height:340px;overflow:hidden}
+.zoom img{display:block;width:100%;height:auto}
+figcaption{padding:12px 14px;font-weight:700;font-size:14.5px;display:flex;gap:10px;align-items:flex-start}
+figcaption .n{flex:none;background:var(--brand-soft);color:var(--brand-strong);border-radius:8px;padding:0 7px;font-size:12.5px;font-weight:800;line-height:22px}
+.flows{display:grid;grid-template-columns:240px minmax(0,1fr);gap:26px;align-items:start}
+@media (max-width:900px){.flows{grid-template-columns:minmax(0,1fr)}.toc{position:static!important}}
+.toc{position:sticky;top:16px;display:flex;flex-direction:column;gap:2px;background:var(--surface);border-radius:18px;padding:12px;box-shadow:var(--shadow);font-size:14px}
+.toc b{padding:4px 8px 8px;font-family:var(--f-display);font-size:16px}
+.toc a{text-decoration:none;color:var(--ink);padding:6px 8px;border-radius:9px;font-weight:600}
+.toc a:hover{background:var(--sunk)}
+.flow-list{display:flex;flex-direction:column;gap:20px;min-width:0}
+.flow{background:var(--surface);border-radius:20px;box-shadow:var(--shadow);padding:18px;scroll-margin-top:16px;min-width:0}
+.flow-h{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-bottom:12px}
+.flow-h h3{font-size:20px;font-weight:800;flex:1;min-width:200px}
+.fid{background:var(--ink);color:var(--bg);border-radius:8px;padding:2px 9px;font-weight:800;font-size:13px}
+.pill{border-radius:999px;padding:3px 11px;font-weight:800;font-size:12.5px}
+.pill.built{background:var(--brand-soft);color:var(--brand-strong)}
+.pill.planned{background:var(--sun-soft);color:var(--sun-ink)}
+.diagram{overflow-x:auto;background:#FFFFFF;border-radius:14px;padding:10px;border:1px solid var(--line)}
+.diagram pre{margin:0}
+dialog{border:0;padding:0;background:transparent;max-width:min(96vw,1400px);max-height:94vh}
+dialog::backdrop{background:rgba(5,15,10,.75)}
+.dlg{background:var(--surface);border-radius:18px;overflow:hidden;display:flex;flex-direction:column;max-height:94vh}
+.dlg-h{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;font-weight:800}
+.dlg-h button{border:0;background:var(--sunk);color:var(--ink);border-radius:10px;padding:8px 14px;font-weight:800;cursor:pointer;min-height:40px}
+.dlg-body{overflow:auto}
+.dlg-body img{display:block;max-width:100%;height:auto;margin:0 auto}
+footer{color:var(--muted);font-size:14px;padding-block:0 40px}
+</style>
+
+<header class="band"><div class="wrap">
+  <div class="eyebrow">MediLink · UI design &amp; functional flows</div>
+  <h1>Design Book</h1>
+  <p>Real screenshots of the running app with Hyderabad demo data, captured automatically from the code on GitHub, plus a step-by-step sequence for every main process.</p>
+  <div class="jump"><a href="#screens"><b>{{NSHOTS}}</b> screens</a><a href="#flows"><b>{{NFLOWS}}</b> flow sequences</a></div>
+  <div class="legend"><span>Built = working in the app today</span><span>Planned = designed, build scheduled</span></div>
+</div></header>
+
+<main class="wrap">
+  <section id="screens">
+    <div class="sec-h"><h2>Screens</h2><p>Click any screen to see it full size. Shop screens are phone-sized because shops mostly order from their phones; the distributor console and admin panel are designed for a desk computer.</p></div>
+    {{SCREENS}}
+  </section>
+
+  <section id="flows">
+    <div class="sec-h"><h2>Functional flows</h2><p>Who does what, in order. Each flow matches the rules in the Architecture &amp; Scenario Handbook.</p></div>
+    <div class="flows">
+      <nav class="toc" aria-label="Flows"><b>Contents</b>{{TOC}}</nav>
+      <div class="flow-list">{{FLOWS}}</div>
+    </div>
+  </section>
+</main>
+<footer class="wrap">Generated from <code>docs/screenshots</code> and <code>docs/functional-flows.md</code> in the MediLink repository.</footer>
+
+<dialog id="dlg"><div class="dlg"><div class="dlg-h"><span id="dlg-t"></span><button type="button" id="dlg-x">Close</button></div><div class="dlg-body"><img id="dlg-i" alt=""></div></div></dialog>
+<script>
+(function(){
+  var d=document.getElementById('dlg'), img=document.getElementById('dlg-i'), t=document.getElementById('dlg-t');
+  document.addEventListener('click',function(e){
+    var b=e.target.closest('.zoom'); if(!b) return;
+    var src=b.querySelector('img').src; img.src=src; img.alt=b.dataset.title; t.textContent=b.dataset.title;
+    if(d.showModal) d.showModal();
+  });
+  document.getElementById('dlg-x').addEventListener('click',function(){d.close()});
+  d.addEventListener('click',function(e){ if(e.target===d) d.close(); });
+})();
+</script>
