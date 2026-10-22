@@ -225,6 +225,8 @@ await step('admin medicine detail', async () => {
   await adm.waitForSelector('table tbody tr', { timeout: 15000 });
   await adm.locator('table tbody tr').filter({ hasText: 'Dolo 650' }).first().click();
   await adm.waitForSelector('.audit', { timeout: 15000 });
+  // The detail panel scrolls on its own; let it grow so the full-page capture shows all of it.
+  await adm.addStyleTag({ content: '.cols>.panel{position:static!important;max-height:none!important;overflow:visible!important}' });
   await shot(adm, '25-admin-medicine', 'Medicines: other names, several barcodes, extra details, batches and change history', { fullPage: true, wait: 1000 });
 });
 await step('admin recalls a medicine', async () => {

@@ -58,13 +58,13 @@ Not used, because of licence or lock-in risk: Redis (AGPL/source-available), Mon
 | Concept | Design | Status |
 |---|---|---|
 | Master vs reference vs transactions | Separate tables. Reference lists (categories, units, cities, reasons, document types, delivery slots) are **admin-editable tables**, not code | 🟡 enums today → ⏳ P2 |
-| Custom fields | JSON "extra details" column on product, shop and distributor, plus a **Field definitions** table (name, type, required, where shown); new fields need no code | ⏳ P2 |
-| Product identity | One master product · **aliases** (names used by distributors and shops) · **barcodes** table (many per product) · pack/unit conversion (strip ↔ box) | 🟡 master + mapping ✅ · aliases/barcodes/packs ⏳ P2 |
-| Stock | Per distributor item, plus **batches** (batch no, expiry, qty) | 🟡 nearest expiry ✅ · batches ⏳ P2 |
-| Pricing | **Price lists** (per distributor, per shop group, valid from/to) and **schemes** (free qty, % off, ₹ off, valid from/to, targeted) | 🟡 single PTR + scheme ✅ · lists ⏳ P2 |
-| History | **Versioned** price, credit-limit and product changes ("what was the rate on 12 Oct?") | ⏳ P2 |
-| Deletion | **Soft delete** with restore; hard delete only for legal erasure requests | ⏳ P2 |
-| Tenant isolation | Ownership checks in every query ✅ + PostgreSQL row-level security | 🟡 ⏳ P2 |
+| Custom fields | JSON "extra details" column on product, shop and distributor, plus a **Field definitions** table (name, type, required, where shown); new fields need no code (Admin › Data fields; values checked; hiding a field keeps its values) | ✅ |
+| Product identity | One master product · **aliases** (names used by distributors and shops) · **barcodes** table (many per product) · pack/unit conversion (strip ↔ box) | 🟡 master + mapping + aliases (incl. Telugu/Hindi script) + many barcodes ✅ · pack conversion ⏳ part 2 |
+| Stock | Per distributor item, plus **batches** (batch no, expiry, qty) | ✅ batches from billing software; nearest expiry kept by the database |
+| Pricing | **Price lists** (per distributor, per shop group, valid from/to) and **schemes** (free qty, % off, ₹ off, valid from/to, targeted) | 🟡 single PTR + scheme ✅ · lists ⏳ part 2 |
+| History | **Versioned** price, credit-limit and product changes ("what was the rate on 12 Oct?"): written by database triggers with the admin's name, append-only | ✅ |
+| Deletion | **Soft delete** with restore; hard delete only for legal erasure requests | 🟡 medicines never deleted (status Discontinued) ✅ · general restore ⏳ part 2 |
+| Tenant isolation | Ownership checks in every query ✅ + PostgreSQL row-level security | 🟡 RLS ⏳ part 2 |
 | Money | Integer paise; totals checked by DB constraint | ✅ |
 | IDs | UUIDs internally; human codes for people (ML-10241, MLR-20417) | ✅ |
 
@@ -91,7 +91,7 @@ One pipeline for products, shops, distributors, price lists, schemes, stock, ope
 |---|---|---|
 | New shop signs up | OTP → details → KYC queue → admin approval; can browse, cannot order until approved | ✅ |
 | Wrong or fake GSTIN | Format + checksum validation; admin asks for changes | ✅ |
-| Drug licence missing or expired | Missing → blocked approval ✅. Expiry dates stored; **auto-block ordering on expiry + reminders 30/7/1 days before** | 🟡 ⏳ P2 |
+| Drug licence missing or expired | Missing → blocked approval ✅. Expiry dates stored; **auto-block ordering on expiry + warning 30 days before**; admin records renewals; expired distributors drop out of offers | ✅ (SMS reminders 30/7/1 ⏳ P4) |
 | Shop staff tries to place an order | Blocked; can add to cart and shortage list | ✅ |
 | Owner leaves or shop is sold | Admin transfers ownership; old owner suspended; history kept | ⏳ P2 |
 | Employee leaves | Suspend → logged out of all devices immediately | ✅ (pending upload) |
@@ -135,7 +135,7 @@ One pipeline for products, shops, distributors, price lists, schemes, stock, ope
 | Only licensed shops may buy | KYC with drug licences before ordering | ✅ |
 | Schedule H/H1 drugs | Marked on screens ✅; H1 sale register export for shops | 🟡 ⏳ P3 |
 | Schedule X / narcotic (NDPS) drugs | **Not orderable on the platform**; blocked at catalogue level | ⏳ P2 |
-| Banned drug (govt notification) or batch recall | Admin marks product/batch banned → ordering blocked instantly → shops that bought that batch notified | ⏳ P2 |
+| Banned drug (govt notification) or batch recall | Admin marks product/batch banned → ordering blocked instantly, shops see the note and same-salt alternatives, distributors with open orders alerted | ✅ product level · batch-level recall ⏳ part 2 |
 | GST rate change | GST % per product with effective date; orders keep the rate at time of order | 🟡 per-product ✅ · dated ⏳ |
 | MRP change | Versioned; invoices keep the MRP at time of billing | ⏳ P2 |
 | SMS rules (DLT) | Registered templates only | ⏳ P4 |
@@ -251,7 +251,7 @@ One pipeline for products, shops, distributors, price lists, schemes, stock, ope
 1. ~~Upload the pending test fix~~ ✅
 2. ✅ **Friendly failure screens:** error boundary + reference codes, offline vs down, maintenance mode, minimum app version, timeouts
 3. ✅ **Duplicate-order protection** (idempotency keys)
-4. **Data model upgrade:** reference tables, aliases, barcodes, packs, batches, price lists, schemes, custom fields, soft delete, history, banned/recalled products, licence expiry blocking, row-level security
+4. 🟡 **Data model upgrade:** part 1 ✅ aliases, barcodes, batches, custom fields, history, banned/recalled products, licence expiry blocking · part 2 ⏳ reference tables, packs, price lists, schemes, general soft delete/restore, batch-level recall, row-level security
 5. **Import Hub** with templates, preview and undo
 6. **Deployment package:** Caddy (HTTPS + fallback page), pgBackRest, restic, Uptime Kuma + status page, one-command install, rollback, monitoring
 7. Then Phases 3–5 from the build prompt (returns, payments, WhatsApp ordering, ERP adapters, sales-rep app, load tests)
