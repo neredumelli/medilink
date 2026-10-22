@@ -27,7 +27,7 @@ export default function HomeScreen() {
   const [paste, setPaste] = useState(false);
   const [pasteText, setPasteText] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const load = useCallback(async () => setHome(await api<Home>('/shop/home')), []);
   useFocusEffect(
