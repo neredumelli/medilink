@@ -231,7 +231,8 @@ await step('admin medicine detail', async () => {
 });
 await step('admin recalls a medicine', async () => {
   await adm.locator('table tbody tr').filter({ hasText: 'Pan 40' }).first().click();
-  await adm.getByText('Pantoprazole 40 mg · Alkem').first().waitFor({ timeout: 15000 });
+  await adm.locator('.panel h2', { hasText: 'Pan 40' }).waitFor({ timeout: 15000 });
+  await adm.waitForTimeout(500);
   await adm.selectOption('#pst', 'RECALLED');
   await adm.fill('#pnote', 'Demo only: recall notice R-2026-14, batches PN-11 to PN-19.');
   await adm.getByRole('button', { name: /save status/i }).click();
