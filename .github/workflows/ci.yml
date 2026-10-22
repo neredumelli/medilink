@@ -40,7 +40,7 @@ jobs:
       - name: API typecheck
         if: always()
         shell: bash
-        run: pnpm --filter @medilink/api typecheck 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; grep -E "error|Error" /tmp/out.txt | head -40 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done || true; exit $code
+        run: pnpm --filter @medilink/api typecheck 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; grep -iE "error|fail|⨯|warn|cannot|unable" /tmp/out.txt | head -40 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done || true; exit $code
       - name: API end-to-end test
         if: always()
         run: pnpm --filter @medilink/api test
@@ -50,15 +50,15 @@ jobs:
       - name: Web typecheck
         if: always()
         shell: bash
-        run: pnpm --filter @medilink/web typecheck 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; grep -E "error|Error" /tmp/out.txt | head -40 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done || true; exit $code
+        run: pnpm --filter @medilink/web typecheck 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; grep -iE "error|fail|⨯|warn|cannot|unable" /tmp/out.txt | head -40 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done || true; exit $code
       - name: Web build
         if: always()
         shell: bash
-        run: pnpm --filter @medilink/web build 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; grep -E "error|Error" /tmp/out.txt | head -40 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done || true; exit $code
+        run: pnpm --filter @medilink/web build 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; grep -iE "error|fail|⨯|warn|cannot|unable" /tmp/out.txt | head -40 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done || true; exit $code
       - name: Mobile typecheck
         if: always()
         shell: bash
-        run: pnpm --filter @medilink/mobile typecheck 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; grep -E "error|Error" /tmp/out.txt | head -40 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done || true; exit $code
+        run: pnpm --filter @medilink/mobile typecheck 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; grep -iE "error|fail|⨯|warn|cannot|unable" /tmp/out.txt | head -40 | while IFS= read -r l; do echo "::error::${l//%/%25}"; done || true; exit $code
 
   mobile:
     # Builds Android (AAB) and iOS (IPA) in Expo's cloud on release tags.
