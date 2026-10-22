@@ -174,7 +174,7 @@ goto :eof
 echo.
 echo  Something went wrong. Copy the text above and send it to Claude for a fix.
 echo  "403 Forbidden" means the office network blocks the download site. Either ask IT to allow
-echo  registry.npmjs.org, binaries.prisma.sh and Docker Hub, or put ITs internal npm mirror URL
+echo  registry.npmjs.org, binaries.prisma.sh and Docker Hub, or put the IT team's npm mirror URL
 echo  in npm-registry.txt, or run this file once on a home network or phone hotspot.
 pause
 exit /b 1
