@@ -125,6 +125,16 @@
     "file": "25-admin-medicine.png"
   },
   {
+    "name": "26-admin-recall",
+    "title": "Recall or ban a medicine: shops are blocked at once and see your note",
+    "file": "26-admin-recall.png"
+  },
+  {
+    "name": "27-shop-sees-recall",
+    "title": "Shop sees why it cannot be ordered, with same-salt alternatives",
+    "file": "27-shop-sees-recall.png"
+  },
+  {
     "name": "28-admin-data-fields",
     "title": "Data fields: add your own fields to medicines, shops and distributors",
     "file": "28-admin-data-fields.png"
