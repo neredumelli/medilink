@@ -68,14 +68,18 @@
 
 	# Only when Caddy cannot reach the app (crashed, restarting, deploying). The app's own
 	# "maintenance" answers come from the API and pass straight through.
-	handle_errors 502 503 504 {
-		@api path /api/*
-		handle @api {
+	handle_errors {
+		@apiDown {
+			path /api/*
+			expression `{err.status_code} in [502, 503, 504]`
+		}
+		handle @apiDown {
 			header Content-Type application/json
 			header Cache-Control no-store
 			respond `{"statusCode":503,"message":"We're having a technical problem. Please try again in a few minutes.","down":true,"ref":"ML-EDGE"}` 503
 		}
-		handle {
+		@pageDown expression `{err.status_code} in [502, 503, 504]`
+		handle @pageDown {
 			root * /srv/fallback
 			rewrite * /index.html
 			header Cache-Control no-store
