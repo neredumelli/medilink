@@ -24,11 +24,15 @@ jobs:
 
       - name: Scripts are valid
         run: |
+          set +e +o pipefail
+          (
           set -e
           for f in scripts/*.sh; do bash -n "$f"; done
           for f in postgres/*.sh; do sh -n "$f"; done
           shellcheck -S error scripts/*.sh postgres/*.sh
 
+
+          ) 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash ../../.github/report.sh /tmp/out.txt $code
       - name: Install (builds the images on this machine)
         env:
           DOMAIN: localhost
@@ -44,6 +48,8 @@ jobs:
 
       - name: HTTPS site, API and security headers
         run: |
+          set +e +o pipefail
+          (
           set -euxo pipefail
           curl -kfsS https://localhost/api/health | grep '"ok":true'
           test "$(curl -ks -o /dev/null -w '%{http_code}' https://localhost/login)" = 200
@@ -55,8 +61,12 @@ jobs:
           cat /tmp/otp.json; test "$code" = 503
           docker compose exec -T postgres psql -U medilink -d medilink -tAc "SELECT name FROM \"User\" WHERE role='SUPER_ADMIN'" | grep 'CI Admin'
 
+
+          ) 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash ../../.github/report.sh /tmp/out.txt $code
       - name: Friendly page while the app is down
         run: |
+          set +e +o pipefail
+          (
           set -euxo pipefail
           docker compose stop api
           test "$(curl -ks -o /tmp/api.json -w '%{http_code}' https://localhost/api/health)" = 503
@@ -69,16 +79,24 @@ jobs:
           for i in $(seq 1 40); do curl -kfsS https://localhost/api/health >/dev/null 2>&1 && break; sleep 3; done
           curl -kfsS https://localhost/api/health
 
+
+          ) 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash ../../.github/report.sh /tmp/out.txt $code
       - name: Backups and the monthly restore test
         run: |
+          set +e +o pipefail
+          (
           set -euxo pipefail
           bash scripts/backup.sh db full
           bash scripts/backup.sh files
           bash scripts/restore-test.sh
           bash scripts/backup.sh list
 
+
+          ) 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash ../../.github/report.sh /tmp/out.txt $code
       - name: Point-in-time restore (undo a mistake)
         run: |
+          set +e +o pipefail
+          (
           set -euxo pipefail
           q() { docker compose exec -T postgres psql -U medilink -d medilink -tAc "$1"; }
           sleep 2
@@ -92,8 +110,12 @@ jobs:
           q "SELECT count(*) FROM \"User\" WHERE role='SUPER_ADMIN'" | grep -x 1
           curl -kfsS https://localhost/api/health
 
+
+          ) 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash ../../.github/report.sh /tmp/out.txt $code
       - name: Deploy, automatic rollback of a broken release, manual rollback
         run: |
+          set +e +o pipefail
+          (
           set -euxo pipefail
           for i in api web caddy; do docker tag local/medilink-$i:ci1 local/medilink-$i:ci2; done
           bash scripts/deploy.sh ci2 --local
@@ -108,6 +130,8 @@ jobs:
           grep -x 'MEDILINK_VERSION=ci1' .env
           curl -kfsS https://localhost/api/health
 
+
+          ) 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash ../../.github/report.sh /tmp/out.txt $code
       - name: Health check script
         run: bash scripts/healthcheck.sh
 
