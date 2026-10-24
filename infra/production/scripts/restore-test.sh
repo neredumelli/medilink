@@ -15,7 +15,12 @@ done
 cleanup() { docker rm -f "$name" >/dev/null 2>&1 || true; docker volume rm "$vol" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
-fail() { alert "❌ Monthly restore test FAILED: $*"; log "FAILED: $*"; exit 1; }
+fail() {
+  log "FAILED: $*"
+  docker logs --tail 60 "$name" 2>&1 | sed 's/^/  restored-db | /' || true
+  alert "❌ Monthly restore test FAILED: $*"
+  exit 1
+}
 
 log "Restore test: restoring the newest backup from repo $repo into a scratch database…"
 docker volume create "$vol" >/dev/null
