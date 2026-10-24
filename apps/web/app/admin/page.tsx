@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { STATUS_LABEL_EN } from '@medilink/core';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, peek } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { ago, inr0 } from '@/lib/format';
 import { Icon } from '@/components/Icon';
@@ -68,12 +68,12 @@ interface Audit {
 
 export default function AdminPage() {
   const { me, toast } = useSession();
-  const [licences, setLicences] = useState<LicenceAlert[]>([]);
-  const [ov, setOv] = useState<Overview | null>(null);
-  const [kyc, setKyc] = useState<Kyc[]>([]);
-  const [health, setHealth] = useState<Health[]>([]);
-  const [orders, setOrders] = useState<OrderRow[]>([]);
-  const [audit, setAudit] = useState<Audit[]>([]);
+  const [licences, setLicences] = useState<LicenceAlert[]>(() => peek('/admin/licences') ?? []);
+  const [ov, setOv] = useState<Overview | null>(() => peek<Overview>('/admin/overview') ?? null);
+  const [kyc, setKyc] = useState<Kyc[]>(() => peek('/admin/kyc') ?? []);
+  const [health, setHealth] = useState<Health[]>(() => peek('/admin/sync-health') ?? []);
+  const [orders, setOrders] = useState<OrderRow[]>(() => peek('/admin/orders') ?? []);
+  const [audit, setAudit] = useState<Audit[]>(() => peek('/admin/audit') ?? []);
 
   const load = useCallback(async () => {
     const [o, k, h, or, a, l] = await Promise.all([

@@ -24,7 +24,7 @@
   "postCreateCommand": "bash .devcontainer/setup.sh",
   "postStartCommand": "docker compose -f infra/docker-compose.yml up -d postgres",
   "postAttachCommand": {
-    "app": "pnpm dev"
+    "app": "pnpm start"
   },
   "customizations": {
     "codespaces": {

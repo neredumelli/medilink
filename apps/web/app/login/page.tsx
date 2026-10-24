@@ -4,7 +4,7 @@ import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { isIndianMobile, LANGS, Lang } from '@medilink/core';
 import { api, ApiError, setSession } from '@/lib/api';
-import { homeFor, useSession } from '@/lib/session';
+import { homeDataFor, homeFor, useSession } from '@/lib/session';
 import { PillLogo } from '@/components/Icon';
 
 const LANG_LABEL: Record<Lang, string> = { en: 'English', te: 'తెలుగు', hi: 'हिंदी' };
@@ -53,6 +53,9 @@ export default function Login() {
         return;
       }
       setSession(res);
+      // Start loading the home screen's data together with the profile, not after it.
+      homeDataFor(res.user.role).forEach((p) => api(p).catch(() => {}));
+      router.prefetch(homeFor(res.user.role));
       await reload();
       router.replace(homeFor(res.user.role));
     } catch (err) {
@@ -71,6 +74,9 @@ export default function Login() {
     try {
       const res = await api('/auth/2fa/verify', { body: { twoFactorToken, code: appCode.trim() } });
       setSession(res);
+      // Start loading the home screen's data together with the profile, not after it.
+      homeDataFor(res.user.role).forEach((p) => api(p).catch(() => {}));
+      router.prefetch(homeFor(res.user.role));
       await reload();
       router.replace(homeFor(res.user.role));
     } catch (err) {

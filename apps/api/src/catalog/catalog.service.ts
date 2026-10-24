@@ -71,8 +71,9 @@ export class CatalogService {
     return new Map(links.map((l) => [l.distributorId, { link: l, available: l.creditLimitPaise - l.outstandingPaise - l.reservedPaise }]));
   }
 
-  async offersFor(retailerId: string, productIds: string[]): Promise<Map<string, OfferView[]>> {
-    const credit = await this.linkedCredit(retailerId);
+  async offersFor(retailerId: string, productIds: string[], knownCredit?: Awaited<ReturnType<CatalogService['linkedCredit']>>): Promise<Map<string, OfferView[]>> {
+    if (productIds.length === 0) return new Map();
+    const credit = knownCredit ?? (await this.linkedCredit(retailerId));
     const items = await this.prisma.distributorItem.findMany({
       where: { productId: { in: productIds }, distributorId: { in: [...credit.keys()] } },
       include: { distributor: true },
@@ -124,52 +125,77 @@ export class CatalogService {
     }));
   }
 
+  /**
+   * Product cards for search, barcode and detail screens. A fixed number of queries however many
+   * medicines match (no per-medicine round trips), so search stays fast as the catalogue grows.
+   */
   async cards(retailerId: string, productIds: string[]): Promise<ProductCard[]> {
     if (productIds.length === 0) return [];
-    const [products, offers, prefs] = await Promise.all([
+    const credit = await this.linkedCredit(retailerId);
+    const linkedIds = [...credit.keys()];
+    const [products, offers, prefs, unlinked] = await Promise.all([
       this.prisma.product.findMany({ where: { id: { in: productIds } } }),
-      this.offersFor(retailerId, productIds),
+      this.offersFor(retailerId, productIds, credit),
       this.prisma.retailerProductPref.findMany({ where: { retailerId, productId: { in: productIds } } }),
+      this.prisma.distributorItem.groupBy({
+        by: ['productId'],
+        where: { productId: { in: productIds }, stockQty: { gt: 0 }, distributorId: { notIn: linkedIds }, distributor: { kycStatus: 'APPROVED', ...licensedDistributor() } },
+        _count: { _all: true },
+      }),
     ]);
-    const linkedIds = [...(await this.linkedCredit(retailerId)).keys()];
     const usual = new Map(prefs.map((p) => [p.productId, p.usualQty]));
+    const unlinkedCount = new Map(unlinked.map((u) => [u.productId!, u._count._all]));
     const byId = new Map(products.map((p) => [p.id, p]));
 
-    const cards: ProductCard[] = [];
-    for (const id of productIds) {
-      const p = byId.get(id);
-      if (!p) continue;
-      const qty = usual.get(id) ?? 10;
-      const blocked = productBlockedMessage(p.name, p.status, p.statusNote, p);
-      const list = blocked ? [] : offers.get(id) ?? [];
-      const best = blocked ? null : pickBest(CatalogService.toCoreOffers(id, list), qty, { gstPct: p.gstPct });
-      const unlinkedWithStock = blocked
-        ? 0
-        : await this.prisma.distributorItem.count({ where: { productId: id, stockQty: { gt: 0 }, distributorId: { notIn: linkedIds }, distributor: { kycStatus: 'APPROVED', ...licensedDistributor() } } });
-      cards.push({
-        product: { id: p.id, name: p.name, form: p.form, pack: p.pack, salt: p.salt, company: p.company, schedule: p.schedule, ndps: p.ndps, category: p.category, mrpPaise: p.mrpPaise, gstPct: p.gstPct, status: p.status, statusNote: p.statusNote },
-        blocked,
-        usualQty: qty,
-        offers: list,
-        best: best && { distributorId: best.offer.distributorId, netRatePaise: best.netRate, partial: best.partial, overCredit: best.overCredit, reasons: best.reasons },
-        unlinkedWithStock,
-        substitutes: best ? [] : await this.substitutes(retailerId, p),
+    const draft = productIds
+      .map((id) => byId.get(id))
+      .filter((p): p is Product => !!p)
+      .map((p) => {
+        const qty = usual.get(p.id) ?? 10;
+        const blocked = productBlockedMessage(p.name, p.status, p.statusNote, p);
+        const list = blocked ? [] : offers.get(p.id) ?? [];
+        const best = blocked ? null : pickBest(CatalogService.toCoreOffers(p.id, list), qty, { gstPct: p.gstPct });
+        return { p, qty, blocked, list, best };
       });
-    }
-    return cards;
+    const subs = await this.substitutesFor(retailerId, draft.filter((d) => !d.best).map((d) => d.p), credit);
+
+    return draft.map(({ p, qty, blocked, list, best }) => ({
+      product: { id: p.id, name: p.name, form: p.form, pack: p.pack, salt: p.salt, company: p.company, schedule: p.schedule, ndps: p.ndps, category: p.category, mrpPaise: p.mrpPaise, gstPct: p.gstPct, status: p.status, statusNote: p.statusNote },
+      blocked,
+      usualQty: qty,
+      offers: list,
+      best: best && { distributorId: best.offer.distributorId, netRatePaise: best.netRate, partial: best.partial, overCredit: best.overCredit, reasons: best.reasons },
+      unlinkedWithStock: blocked ? 0 : unlinkedCount.get(p.id) ?? 0,
+      substitutes: best ? [] : subs.get(p.id) ?? [],
+    }));
   }
 
-  /** Same composition, in stock at a linked distributor — shown when something is out everywhere. */
+  /** Same-salt medicines in stock for several products at once (two queries in total). */
+  async substitutesFor(retailerId: string, products: Product[], credit?: Awaited<ReturnType<CatalogService['linkedCredit']>>) {
+    const out = new Map<string, ProductCard['substitutes']>();
+    if (products.length === 0) return out;
+    const salts = [...new Set(products.map((p) => p.salt.toLowerCase()))];
+    const same = await this.prisma.product.findMany({
+      where: { OR: salts.map((salt) => ({ salt: { equals: salt, mode: 'insensitive' as const } })), status: 'ACTIVE', ndps: false, schedule: { not: 'X' } },
+      take: 200,
+    });
+    const offers = await this.offersFor(retailerId, same.map((s) => s.id), credit);
+    for (const p of products) {
+      const list = same
+        .filter((s) => s.id !== p.id && s.salt.toLowerCase() === p.salt.toLowerCase())
+        .slice(0, 5)
+        .map((s) => {
+          const inStock = (offers.get(s.id) ?? []).filter((o) => o.stockQty > 0);
+          return inStock.length ? { id: s.id, name: s.name, company: s.company, fromNetRatePaise: Math.min(...inStock.map((o) => o.netRatePaise)) } : null;
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
+      out.set(p.id, list);
+    }
+    return out;
+  }
+
   async substitutes(retailerId: string, p: Product) {
-    const same = await this.prisma.product.findMany({ where: { salt: { equals: p.salt, mode: 'insensitive' }, id: { not: p.id }, status: 'ACTIVE', ndps: false, schedule: { not: 'X' } }, take: 5 });
-    if (same.length === 0) return [];
-    const offers = await this.offersFor(retailerId, same.map((s) => s.id));
-    return same
-      .map((s) => {
-        const inStock = (offers.get(s.id) ?? []).filter((o) => o.stockQty > 0);
-        return inStock.length ? { id: s.id, name: s.name, company: s.company, fromNetRatePaise: Math.min(...inStock.map((o) => o.netRatePaise)) } : null;
-      })
-      .filter((x): x is NonNullable<typeof x> => x !== null);
+    return (await this.substitutesFor(retailerId, [p])).get(p.id) ?? [];
   }
 
   async search(retailerId: string, q: string) {

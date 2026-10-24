@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
+import { api, peek } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { ago } from '@/lib/format';
 import { ProductTile } from '@/components/shop/ProductCard';
@@ -22,7 +22,7 @@ export default function ListPage() {
   const { toast } = useSession();
   const { refresh, markStart } = useShop();
   const router = useRouter();
-  const [items, setItems] = useState<Item[] | null>(null);
+  const [items, setItems] = useState<Item[] | null>(() => peek<Item[]>('/shop/shortage') ?? null);
   const load = useCallback(async () => setItems(await api<Item[]>('/shop/shortage')), []);
   useEffect(() => {
     load().catch(() => {});

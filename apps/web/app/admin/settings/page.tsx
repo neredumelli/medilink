@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, peek } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { Icon } from '@/components/Icon';
 import { ConsoleShell } from '@/components/ConsoleShell';
@@ -23,13 +23,14 @@ const toLocalInput = (iso: string | null) => {
 
 export default function SettingsPage() {
   const { me, toast } = useSession();
-  const [s, setS] = useState<Settings | null>(null);
-  const [message, setMessage] = useState('');
-  const [until, setUntil] = useState('');
-  const [minVersion, setMinVersion] = useState('');
+  const seen = peek<Settings>('/admin/settings');
+  const [s, setS] = useState<Settings | null>(seen ?? null);
+  const [message, setMessage] = useState(seen?.maintenance.message ?? '');
+  const [until, setUntil] = useState(seen ? toLocalInput(seen.maintenance.until) : '');
+  const [minVersion, setMinVersion] = useState(seen?.minAppVersion ?? '');
   const [confirming, setConfirming] = useState(false);
-  const [require2fa, setRequire2fa] = useState(true);
-  const [ipList, setIpList] = useState('');
+  const [require2fa, setRequire2fa] = useState(seen?.security.admin2faRequired ?? true);
+  const [ipList, setIpList] = useState(seen?.security.adminIpAllowList.join('\n') ?? '');
   const canEdit = me?.role === 'SUPER_ADMIN' || me?.role === 'ADMIN_OPS';
   const isSuper = me?.role === 'SUPER_ADMIN';
 

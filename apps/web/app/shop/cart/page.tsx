@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, peek } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { inr, inr0 } from '@/lib/format';
 import { Icon } from '@/components/Icon';
@@ -48,7 +48,7 @@ export default function CartPage() {
   const { t, toast } = useSession();
   const { refresh, takeElapsed, home } = useShop();
   const router = useRouter();
-  const [cart, setCart] = useState<Cart | null>(null);
+  const [cart, setCart] = useState<Cart | null>(() => peek<Cart>('/shop/cart') ?? null);
   /** One key per placement attempt: a retry after a lost connection reuses it, so the order is never created twice. */
   const placeKey = useRef<string | null>(null);
   const newKey = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`);

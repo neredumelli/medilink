@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { PRODUCT_STATUS_LABEL, ProductStatus } from '@medilink/core';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, peek, prefetch } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { ago, inr } from '@/lib/format';
 import { Icon } from '@/components/Icon';
@@ -80,7 +80,7 @@ function describe(h: HistoryRow): string {
 export default function ProductsPage() {
   const { me, toast } = useSession();
   const canEdit = me?.role === 'SUPER_ADMIN' || me?.role === 'ADMIN_OPS';
-  const [rows, setRows] = useState<Row[] | null>(null);
+  const [rows, setRows] = useState<Row[] | null>(() => peek<Row[]>('/admin/products?') ?? null);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const [sel, setSel] = useState<Detail | null>(null);
@@ -103,14 +103,18 @@ export default function ProductsPage() {
     return () => window.clearTimeout(t);
   }, [load]);
 
-  const open = async (id: string) => {
-    const d = await api<Detail>(`/admin/products/${id}`);
+  const showDetail = (d: Detail) => {
     setSel(d);
     setNewStatus(d.product.status);
     setNote(d.product.statusNote ?? '');
     setSchedule(d.product.schedule);
     setNdps(d.product.ndps);
     setExtra(Object.fromEntries(Object.entries(d.product.extra ?? {}).map(([k, v]) => [k, String(v)])));
+  };
+  const open = async (id: string) => {
+    const seen = peek<Detail>(`/admin/products/${id}`);
+    if (seen) showDetail(seen);
+    showDetail(await api<Detail>(`/admin/products/${id}`));
   };
 
   async function run(fn: () => Promise<unknown>, done: string) {
@@ -204,7 +208,7 @@ export default function ProductsPage() {
               </thead>
               <tbody>
                 {rows?.map((r) => (
-                  <tr key={r.id} onClick={() => open(r.id)} style={{ cursor: 'pointer', background: id === r.id ? 'var(--brand-soft)' : undefined }}>
+                  <tr key={r.id} onClick={() => open(r.id)} onMouseEnter={() => prefetch([`/admin/products/${r.id}`])} className={`click${id === r.id ? ' sel' : ''}`}>
                     <td>
                       <div className="row" style={{ gap: 10 }}>
                         <ProductTile name={r.name} category={r.category} small />

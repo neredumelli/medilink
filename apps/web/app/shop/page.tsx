@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { greetingKey } from '@medilink/core';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, peek } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { lakh } from '@/lib/format';
 import { Icon } from '@/components/Icon';
@@ -31,6 +31,7 @@ export default function ShopHome() {
   const [searching, setSearching] = useState(false);
   const [paste, setPaste] = useState(false);
   const timer = useRef<number | undefined>(undefined);
+  const latest = useRef('');
 
   useEffect(() => {
     window.clearTimeout(timer.current);
@@ -38,16 +39,22 @@ export default function ShopHome() {
       setResults(null);
       return;
     }
+    // Searched before on this device: show those results at once, then refresh them.
+    const path = `/catalog/search?q=${encodeURIComponent(q.trim().toLowerCase())}`;
+    const seen = peek<Card[]>(path);
+    if (seen) setResults(seen);
     timer.current = window.setTimeout(async () => {
       setSearching(true);
       try {
-        setResults(await api<Card[]>(`/catalog/search?q=${encodeURIComponent(q.trim())}`));
+        const r = await api<Card[]>(path);
+        if (latest.current === path) setResults(r);
       } catch (e) {
         toast(e instanceof ApiError ? e.message : 'Search failed');
       } finally {
         setSearching(false);
       }
-    }, 220);
+    }, seen ? 0 : 120);
+    latest.current = path;
   }, [q, toast]);
 
   async function quickAdd(productId: string, qty: number, name: string) {

@@ -12,6 +12,16 @@ const OUT = process.env.OUT_DIR ?? 'out';
 fs.mkdirSync(OUT, { recursive: true });
 
 const results = [];
+const timings = [];
+/** Milliseconds from a tap until the screen shows its real content. */
+async function timed(page, label, action, selector) {
+  const t = Date.now();
+  await action();
+  await page.waitForSelector(selector, { timeout: 15000 });
+  const ms = Date.now() - t;
+  timings.push({ label, ms });
+  console.log(`timing ${label}: ${ms} ms`);
+}
 const otpCount = (m) => [...fs.readFileSync(LOG, 'utf8').matchAll(new RegExp(`OTP for ${m}: (\\d{6})`, 'g'))];
 
 async function waitForNewOtp(mobile, before) {
@@ -142,6 +152,22 @@ await step('telugu', async () => {
   await shop.getByRole('button', { name: 'EN' }).click();
 });
 
+await step('screen speed (shop)', async () => {
+  const tab = (name) => () => shop.locator('.bnav .tab').filter({ hasText: name }).first().click();
+  await shop.goto(`${BASE}/shop`);
+  await shop.waitForSelector('.tiles');
+  await shop.waitForTimeout(800); // background fetch of the other tabs
+  await timed(shop, 'Tap Orders', tab('Orders'), '.track');
+  await timed(shop, 'Tap List', tab('List'), '.line');
+  await timed(shop, 'Tap Account', tab('Account'), '.dl-item');
+  await timed(shop, 'Tap Home', tab('Home'), '.tiles');
+  await timed(shop, 'Reload the home page', () => shop.reload(), '.tiles .tile');
+  await timed(shop, 'Search a medicine searched before', () => shop.fill('#q', 'dolo'), '.bestbox');
+  await shop.fill('#q', '');
+  await timed(shop, 'Search a new medicine', () => shop.fill('#q', 'shelcal'), '.bestbox');
+  await shop.fill('#q', '');
+});
+
 // ---------------- Distributor (desktop) ----------------
 const desk = await browser.newContext({ viewport: { width: 1366, height: 900 }, deviceScaleFactor: 1.5, locale: 'en-IN' });
 const dist = await desk.newPage();
@@ -265,6 +291,8 @@ await step('licence warning', async () => {
 });
 
 fs.writeFileSync(path.join(OUT, 'index.json'), JSON.stringify(results, null, 2));
+fs.writeFileSync(path.join(OUT, 'timings.json'), JSON.stringify(timings, null, 2));
+console.log('TIMINGS ' + timings.map((t) => `${t.label}: ${t.ms} ms`).join(' · '));
 await browser.close();
 console.log(`Done: ${results.length} screenshots`);
 if (results.length < 10) process.exit(1);

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { STATUS_LABEL_EN } from '@medilink/core';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, peek } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { ago, inr0 } from '@/lib/format';
 import { Icon } from '@/components/Icon';
@@ -52,9 +52,9 @@ const REASONS = ['Credit limit exceeded', 'Items out of stock', 'Old dues pendin
 
 export default function DistributorPage() {
   const { toast } = useSession();
-  const [dash, setDash] = useState<Dash | null>(null);
-  const [lanes, setLanes] = useState<Lane[] | null>(null);
-  const [shops, setShops] = useState<ShopLink[]>([]);
+  const [dash, setDash] = useState<Dash | null>(() => peek<Dash>('/distributor/dashboard') ?? null);
+  const [lanes, setLanes] = useState<Lane[] | null>(() => peek<Lane[]>('/distributor/lanes') ?? null);
+  const [shops, setShops] = useState<ShopLink[]>(() => peek<ShopLink[]>('/distributor/shops') ?? []);
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [reason, setReason] = useState(REASONS[0]!);
 
