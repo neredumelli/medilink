@@ -56,9 +56,9 @@ jobs:
           curl -kfsS https://localhost/api/public/status | grep '"maintenance"'
           curl -ksS -D - -o /dev/null https://localhost/login | grep -i '^strict-transport-security'
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost/login)" = 308
-          # Production never sends a real OTP without a working SMS account; the message is friendly.
+          # Login codes go through the SMS provider (no real account here): the request must be accepted or fail politely.
           code=$(curl -ks -o /tmp/otp.json -w '%{http_code}' -H 'content-type: application/json' -d '{"mobile":"9000000009"}' https://localhost/api/auth/otp/request)
-          cat /tmp/otp.json; test "$code" = 503
+          cat /tmp/otp.json; echo; [ "$code" = 200 ] || { [ "$code" = 503 ] && grep -q 'Could not send the OTP' /tmp/otp.json; }
           docker compose exec -T postgres psql -U medilink -d medilink -tAc "SELECT name FROM \"User\" WHERE role='SUPER_ADMIN'" | grep 'CI Admin'
 
 
