@@ -1,0 +1,30 @@
+[
+  {
+    "label": "Tap Orders",
+    "ms": 39
+  },
+  {
+    "label": "Tap List",
+    "ms": 45
+  },
+  {
+    "label": "Tap Account",
+    "ms": 48
+  },
+  {
+    "label": "Tap Home",
+    "ms": 43
+  },
+  {
+    "label": "Reload the home page",
+    "ms": 79
+  },
+  {
+    "label": "Search a medicine searched before",
+    "ms": 44
+  },
+  {
+    "label": "Search a new medicine",
+    "ms": 190
+  }
+]
