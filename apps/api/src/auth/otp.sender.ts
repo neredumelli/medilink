@@ -18,8 +18,10 @@ export class OtpSender {
       headers: { 'content-type': 'application/json', authkey: cfg.MSG91_AUTH_KEY },
       body: JSON.stringify({ template_id: cfg.MSG91_TEMPLATE_ID, mobile: `91${mobile}`, otp: code }),
     });
-    if (!res.ok) {
-      this.logger.error(`MSG91 failed: ${res.status}`);
+    // MSG91 can answer HTTP 200 with {"type":"error"} (bad key, template not approved, no balance).
+    const body = (await res.json().catch(() => null)) as { type?: string; message?: string } | null;
+    if (!res.ok || body?.type !== 'success') {
+      this.logger.error(`MSG91 failed: HTTP ${res.status} ${body?.type ?? ''} ${body?.message ?? ''}`.trim());
       throw new ServiceUnavailableException('Could not send the OTP right now. Please try again in a minute.');
     }
   }
