@@ -17,7 +17,7 @@ trap cleanup EXIT
 
 fail() {
   log "FAILED: $*"
-  docker logs --tail 60 "$name" 2>&1 | sed 's/^/  restored-db | /' || true
+  docker logs "$name" 2>&1 | grep -v "archive-get command begin\|archive-get command end" | tail -40 | sed 's/^/  restored-db | /' || true
   alert "❌ Monthly restore test FAILED: $*"
   exit 1
 }
