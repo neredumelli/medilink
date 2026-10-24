@@ -86,16 +86,13 @@ h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.1
 .phone.big{font-size:18px}
 .band{background:linear-gradient(160deg,var(--band),var(--band-2));color:var(--band-ink);border-radius:0 0 28px 28px;position:relative;overflow:hidden;
   padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:max(18px,env(safe-area-inset-right,0px));padding-block:16px 18px;display:flex;flex-direction:column;gap:12px}
-.band::before,.band::after{content:"";position:absolute;border-radius:999px;background:rgba(255,255,255,.08);pointer-events:none}
-.band::before{width:220px;height:84px;right:-60px;top:-18px;transform:rotate(-24deg)}
-.band::after{width:150px;height:56px;right:40px;top:58px;transform:rotate(-24deg);background:rgba(255,190,40,.18)}
 .band-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;position:relative;z-index:1}
 .hello{font-size:.88em;opacity:.9;font-weight:700}
 .shopname{font-family:var(--f-display);font-weight:800;font-size:1.45em;line-height:1.1}
 .band .seg{background:rgba(255,255,255,.16)}
 .band .seg button{color:var(--band-ink);padding:5px 10px;min-height:34px}
 .band .seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink)}
-.today{display:flex;gap:8px;overflow-x:auto;position:relative;z-index:1;scrollbar-width:none;margin-inline:-2px;padding:2px}
+.today{display:flex;flex-wrap:wrap;gap:8px;position:relative;z-index:1;padding:2px}
 .today span{flex:none;display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.16);border-radius:999px;padding:6px 12px;font-weight:700;font-size:.85em}
 .today b{color:#FFD45C}
 .search{position:relative;z-index:1}
@@ -116,7 +113,8 @@ h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.1
 .tile b{font-family:var(--f-display);font-size:1.12em;font-weight:800;line-height:1.15;display:block}
 .tile small{color:var(--muted);font-weight:600;font-size:.8em}
 .tile .count{position:absolute;top:12px;right:12px;background:var(--c);color:var(--surface);font-weight:800;border-radius:999px;min-width:26px;height:26px;display:grid;place-items:center;font-size:.85em;padding:0 6px}
-.usual{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 6px;scrollbar-width:thin}
+.usual{display:flex;gap:10px;overflow-x:auto;padding:4px 16px 22px;margin:-4px -16px -16px;scrollbar-width:none;scroll-padding-inline:16px}
+.usual::-webkit-scrollbar{display:none}
 .umini{flex:none;width:132px;border:0;background:var(--surface);border-radius:18px;padding:12px;display:flex;flex-direction:column;gap:8px;text-align:left;box-shadow:var(--shadow)}
 .umini b{font-weight:800;line-height:1.15}
 .umini .plus{align-self:flex-start;display:inline-flex;align-items:center;gap:4px;background:var(--brand-soft);color:var(--brand-strong);font-weight:800;border-radius:10px;padding:4px 10px;font-size:.85em}
@@ -229,7 +227,8 @@ textarea{width:100%;min-height:150px;border:2px solid var(--line);background:var
 .lane-h h2{font-size:17px;font-weight:800;display:flex;align-items:center;gap:8px}
 .lane-h .dot{width:10px;height:10px;border-radius:50%;background:var(--c)}
 .lane-h .n{background:var(--c);color:var(--surface);border-radius:999px;font-weight:800;font-size:12px;padding:1px 8px}
-.ocard{background:var(--surface);border-radius:18px;padding:12px;display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow);border-top:4px solid var(--c)}
+.ocard{background:var(--surface);border-radius:18px;padding:16px 12px 12px;display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.ocard::before{content:"";position:absolute;inset:0 0 auto;height:5px;background:var(--c)}
 .o-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
 .o-top b{font-weight:800;line-height:1.2}
 .o-val{font-family:var(--f-display);font-weight:800;font-size:1.15em;white-space:nowrap}
@@ -242,9 +241,19 @@ textarea{width:100%;min-height:150px;border:2px solid var(--line);background:var
 .panel{background:var(--surface);border-radius:22px;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:var(--shadow);min-width:0}
 .panel h2{font-size:19px;font-weight:800}
 .tablewrap{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:14px}
-th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:800;padding:6px 8px;border-bottom:1.5px solid var(--line);white-space:nowrap}
-td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+table{width:100%;border-collapse:separate;border-spacing:0 8px;margin-top:-8px;font-size:14px}
+th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:800;padding:6px 14px 0;white-space:nowrap}
+td{--rowbg:var(--sunk);padding:12px 14px;vertical-align:top;background:var(--rowbg);transition:background-color .12s}
+/* cover the hairline that screen scaling leaves between cells, so each row reads as one piece */
+td+td{box-shadow:-1px 0 0 var(--rowbg)}
+td:first-child{border-radius:16px 0 0 16px}
+td:last-child{border-radius:0 16px 16px 0}
+td:only-child{border-radius:16px}
+tbody tr.click{cursor:pointer}
+tbody tr.click:hover td{--rowbg:color-mix(in srgb,var(--brand-soft) 55%,var(--sunk))}
+tbody tr.sel td{--rowbg:var(--brand-soft)}
+tbody tr.sel td:first-child{box-shadow:inset 4px 0 0 var(--brand)}
+tbody tr.off td{opacity:.55}
 .r{text-align:right}
 .actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .field{display:flex;flex-direction:column;gap:4px;font-size:13px;min-width:0}
@@ -291,6 +300,8 @@ a{color:inherit}
 .sys-card p{margin:0}
 .sys-icon{width:72px;height:72px;border-radius:22px;margin:0 auto;display:grid;place-items:center;font-size:36px;font-weight:800;background:var(--cs);color:var(--c)}
 .sys-until{background:var(--sun-soft);color:var(--sun-ink);border-radius:12px;padding:8px 12px;font-weight:700}
+.progress{position:fixed;inset:0 0 auto;height:3px;z-index:70;background:linear-gradient(90deg,transparent,var(--brand),var(--sun),transparent);background-size:50% 100%;background-repeat:no-repeat;pointer-events:none}
+@media (prefers-reduced-motion:no-preference){.progress{animation:slide 1s ease-in-out infinite}@keyframes slide{from{background-position:-50% 0}to{background-position:150% 0}}}
 .slowbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(150px + env(safe-area-inset-bottom,0px));z-index:60;background:var(--ink);color:var(--bg);
   border-radius:999px;padding:10px 18px;font-weight:800;font-size:14px;display:flex;align-items:center;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
 .spinner{width:16px;height:16px;border-radius:50%;border:2.5px solid currentColor;border-right-color:transparent;display:inline-block}

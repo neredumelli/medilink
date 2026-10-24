@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, peek } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { inr0 } from '@/lib/format';
 import { Icon } from '@/components/Icon';
@@ -18,7 +18,7 @@ interface Dist {
 export default function AccountPage() {
   const { me, logout, toast, t } = useSession();
   const router = useRouter();
-  const [dists, setDists] = useState<Dist[] | null>(null);
+  const [dists, setDists] = useState<Dist[] | null>(() => peek<Dist[]>('/shop/distributors') ?? null);
   const [big, setBig] = useState(false);
   const load = useCallback(async () => setDists(await api<Dist[]>('/shop/distributors')), []);
   useEffect(() => {

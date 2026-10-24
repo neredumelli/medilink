@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { api, peek, prefetch } from '@/lib/api';
 
 export interface HomeData {
   shop: {
@@ -27,16 +27,17 @@ interface ShopCtx {
   takeElapsed: () => number | undefined;
 }
 
+type CartSum = { itemCount: number; totals: { total: number } };
 const Ctx = createContext<ShopCtx | null>(null);
 const START_KEY = 'ml.orderStart';
 
 export function ShopProvider({ children }: { children: ReactNode }) {
-  const [home, setHome] = useState<HomeData | null>(null);
-  const [cartCount, setCount] = useState(0);
-  const [cartTotal, setTotal] = useState(0);
+  const [home, setHome] = useState<HomeData | null>(() => peek<HomeData>('/shop/home') ?? null);
+  const [cartCount, setCount] = useState(() => peek<CartSum>('/shop/cart')?.itemCount ?? 0);
+  const [cartTotal, setTotal] = useState(() => peek<CartSum>('/shop/cart')?.totals.total ?? 0);
 
   const refresh = useCallback(async () => {
-    const [h, c] = await Promise.all([api<HomeData>('/shop/home'), api<{ itemCount: number; totals: { total: number } }>('/shop/cart')]);
+    const [h, c] = await Promise.all([api<HomeData>('/shop/home'), api<CartSum>('/shop/cart')]);
     setHome(h);
     setCount(c.itemCount);
     setTotal(c.totals.total);
@@ -44,6 +45,11 @@ export function ShopProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     refresh().catch(() => {});
+    // Fetch the other tabs now, so every tap on the bottom bar opens instantly.
+    prefetch(['/shop/orders', '/shop/shortage', '/shop/distributors']);
+    const onFocus = () => document.visibilityState === 'visible' && refresh().catch(() => {});
+    document.addEventListener('visibilitychange', onFocus);
+    return () => document.removeEventListener('visibilitychange', onFocus);
   }, [refresh]);
 
   return (

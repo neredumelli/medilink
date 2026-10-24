@@ -25,6 +25,12 @@ export function SystemStatus() {
   const sys = useSyncExternalStore(subscribe, getSystem, getSystem);
   const slow = useSyncExternalStore(subscribe, isSlow, () => false);
   const [checking, setChecking] = useState(false);
+  const [verySlow, setVerySlow] = useState(false);
+  useEffect(() => {
+    if (!slow) return setVerySlow(false);
+    const id = window.setTimeout(() => setVerySlow(true), 8_000);
+    return () => window.clearTimeout(id);
+  }, [slow]);
 
   const recheck = useCallback(async () => {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return setSystem({ kind: 'offline' });
@@ -64,10 +70,16 @@ export function SystemStatus() {
   }, []);
 
   if (sys.kind === 'ok') {
+    // An action taking a moment: a thin line at the top, no words. Words only if it is really slow (bad network).
     return slow ? (
-      <div className="slowbar" role="status">
-        <span className="spinner" aria-hidden="true" /> {t('stillWorking')}
-      </div>
+      <>
+        <div className="progress" aria-hidden="true" />
+        {verySlow && (
+          <div className="slowbar" role="status">
+            {t('stillWorking')}
+          </div>
+        )}
+      </>
     ) : null;
   }
 

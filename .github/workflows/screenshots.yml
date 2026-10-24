@@ -48,6 +48,7 @@ jobs:
           API_LOG="$GITHUB_WORKSPACE/api.log" OUT_DIR="$GITHUB_WORKSPACE/docs/screenshots" node shoot.mjs 2>&1 | tee /tmp/shoot.txt
           code=${PIPESTATUS[0]}
           grep -E "STEP FAILED|Done:" /tmp/shoot.txt | while IFS= read -r l; do echo "::warning::$l"; done || true
+          grep -E "^TIMINGS" /tmp/shoot.txt | while IFS= read -r l; do echo "::notice title=Screen speed::$l"; done || true
           exit $code
       - name: Report server errors
         if: failure()
@@ -60,8 +61,8 @@ jobs:
           git checkout -- apps/web/next-env.d.ts 2>/dev/null || true   # Next rewrites this file during build
           git add docs/screenshots
           git commit -m "Update UI screenshots [skip ci]" || { echo "No changes"; exit 0; }
-          git pull --rebase --autostash origin main 2>&1 | tail -3
-          git push origin HEAD:main 2>&1 | tee /tmp/push.txt
+          git pull --rebase --autostash origin "$GITHUB_REF_NAME" 2>&1 | tail -3
+          git push origin "HEAD:$GITHUB_REF_NAME" 2>&1 | tee /tmp/push.txt
           code=${PIPESTATUS[0]}
           [ $code -ne 0 ] && while IFS= read -r l; do echo "::error::$l"; done < /tmp/push.txt
           exit $code

@@ -166,8 +166,8 @@ echo    To stop: close this window or press Ctrl+C
 echo  ==========================================
 echo.
 title MediLink - running (close to stop)
-start "" cmd /c "timeout /t 30 /nobreak >nul & start http://localhost:3000"
-call pnpm dev
+start "" cmd /c "timeout /t 90 /nobreak >nul & start http://localhost:3000"
+call pnpm start
 goto :eof
 
 :fail

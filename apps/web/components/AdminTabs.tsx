@@ -1,11 +1,18 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { prefetch } from '@/lib/api';
+import { homeDataFor } from '@/lib/session';
 
 /** Tabs shown in the admin header band. */
 export function AdminTabs() {
   const path = usePathname();
+  // Every admin tab's data is fetched in the background, so switching tabs is instant.
+  useEffect(() => {
+    prefetch([...homeDataFor('ADMIN'), '/admin/users?', '/admin/products?', '/admin/fields?entity=PRODUCT', '/admin/settings']);
+  }, []);
   const tabs = [
     { href: '/admin', label: 'Overview' },
     { href: '/admin/users', label: 'Users & access' },

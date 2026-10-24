@@ -45,7 +45,8 @@ jobs:
       - name: API end-to-end test
         if: always()
         shell: bash
-        run: set +e +o pipefail; pnpm --filter @medilink/api test 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash .github/report.sh /tmp/out.txt $code
+        env: { SPEED_OUT: /tmp/speed.txt }
+        run: set +e +o pipefail; pnpm --filter @medilink/api test 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; [ -f /tmp/speed.txt ] && echo "::notice title=Speed::$(cat /tmp/speed.txt)"; bash .github/report.sh /tmp/out.txt $code
       - name: API build
         if: always()
         run: pnpm --filter @medilink/api build

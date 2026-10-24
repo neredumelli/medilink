@@ -1,7 +1,7 @@
 {
   "name": "medilink",
   "private": true,
-  "description": "MediLink \u2014 B2B pharma & FMCG ordering for shops, distributors and sales reps (web, Android, iOS).",
+  "description": "MediLink — B2B pharma & FMCG ordering for shops, distributors and sales reps (web, Android, iOS).",
   "packageManager": "pnpm@9.12.3",
   "engines": {
     "node": ">=20.11"
@@ -9,6 +9,7 @@
   "scripts": {
     "setup": "pnpm install && pnpm db:up && pnpm db:migrate && pnpm db:seed",
     "dev": "pnpm --filter @medilink/core build && turbo run dev --parallel --filter=@medilink/api --filter=@medilink/web",
+    "start": "node tools/start-fast.mjs",
     "dev:mobile": "pnpm --filter @medilink/mobile start",
     "build": "turbo run build",
     "test": "turbo run test",

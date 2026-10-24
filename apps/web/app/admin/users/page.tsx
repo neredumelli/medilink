@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { assignableRoles, ROLE_LABEL, RoleName, ROLES } from '@medilink/core';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, peek, prefetch } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { ago } from '@/lib/format';
 import { Icon } from '@/components/Icon';
@@ -52,7 +52,7 @@ const ACTION_LABEL: Record<string, string> = {
 
 export default function UsersPage() {
   const { me, toast } = useSession();
-  const [rows, setRows] = useState<UserRow[] | null>(null);
+  const [rows, setRows] = useState<UserRow[] | null>(() => peek<UserRow[]>('/admin/users?') ?? null);
   const [q, setQ] = useState('');
   const [role, setRole] = useState('');
   const [status, setStatus] = useState('');
@@ -74,6 +74,8 @@ export default function UsersPage() {
 
   const open = async (id: string) => {
     setReason('');
+    const seen = peek<Detail>(`/admin/users/${id}`);
+    if (seen) setSel(seen);
     setSel(await api<Detail>(`/admin/users/${id}`));
   };
 
@@ -174,7 +176,7 @@ export default function UsersPage() {
               </thead>
               <tbody>
                 {rows?.map((u) => (
-                  <tr key={u.id} onClick={() => open(u.id)} style={{ cursor: 'pointer', background: sel?.user.id === u.id ? 'var(--brand-soft)' : undefined }}>
+                  <tr key={u.id} onClick={() => open(u.id)} onMouseEnter={() => prefetch([`/admin/users/${u.id}`])} className={`click${sel?.user.id === u.id ? ' sel' : ''}`}>
                     <td>
                       <button className="linkbtn" style={{ padding: 0, textDecoration: 'none', color: 'var(--ink)', fontWeight: 800, fontSize: 14, textAlign: 'left' }} onClick={() => open(u.id)}>
                         {u.name}

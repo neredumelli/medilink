@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { STATUS_LABEL_EN } from '@medilink/core';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, peek } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { ago, inr0 } from '@/lib/format';
 import { Icon } from '@/components/Icon';
@@ -29,7 +29,7 @@ export default function OrdersPage() {
   const { t, toast } = useSession();
   const { refresh } = useShop();
   const router = useRouter();
-  const [orders, setOrders] = useState<Order[] | null>(null);
+  const [orders, setOrders] = useState<Order[] | null>(() => peek<Order[]>('/shop/orders') ?? null);
   const [just, setJust] = useState<{ orders: { distributorName: string }[]; totalPaise: number; timeToPlaceSec: number | null } | null>(null);
 
   const load = useCallback(async () => setOrders(await api<Order[]>('/shop/orders')), []);

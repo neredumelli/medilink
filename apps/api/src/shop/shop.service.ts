@@ -77,8 +77,8 @@ export class ShopService {
   // ------------------------------------------------------------ cart
   async getCart(retailerId: string) {
     const rows = await this.prisma.cartItem.findMany({ where: { retailerId }, include: { product: true }, orderBy: { createdAt: 'asc' } });
-    const offers = await this.catalog.offersFor(retailerId, rows.map((r) => r.productId));
     const credit = await this.catalog.linkedCredit(retailerId);
+    const offers = await this.catalog.offersFor(retailerId, rows.map((r) => r.productId), credit);
     const groups = new Map<string, any>();
     for (const r of rows) {
       const offer = (offers.get(r.productId) ?? []).find((o) => o.distributorId === r.distributorId);

@@ -449,4 +449,33 @@ describe('Shop → distributor order flow', () => {
 
     await http().post('/api/admin/settings').set(sAuth).send({ security: { admin2faRequired: false, adminIpAllowList: [] } }).expect(201);
   });
+
+  // ---------------------------------------------------------------- speed
+  it('answers fast: search, home, cart and the distributor lanes (p95 under target)', async () => {
+    const shop = { Authorization: `Bearer ${await login('9848012345')}` };
+    const dist = { Authorization: `Bearer ${await login('9876500001')}` };
+    const http = () => request(app.getHttpServer());
+    const measure = async (label: string, run: (i: number) => Promise<unknown>, n = 30) => {
+      for (let i = 0; i < 3; i++) await run(i); // warm up
+      const times: number[] = [];
+      for (let i = 0; i < n; i++) {
+        const t = performance.now();
+        await run(i);
+        times.push(performance.now() - t);
+      }
+      times.sort((a, b) => a - b);
+      return { label, p50: Math.round(times[Math.floor(n * 0.5)]!), p95: Math.round(times[Math.floor(n * 0.95)]!) };
+    };
+    const words = ['dolo', 'pan 40', 'azithrl', 'telma', 'paracetamol', 'డోలో', 'shelcal', 'montair'];
+    const results = [
+      await measure('search', (i) => http().get(`/api/catalog/search?q=${encodeURIComponent(words[i % words.length]!)}`).set(shop).expect(200)),
+      await measure('shop home', () => http().get('/api/shop/home').set(shop).expect(200)),
+      await measure('cart', () => http().get('/api/shop/cart').set(shop).expect(200)),
+      await measure('distributor lanes', () => http().get('/api/distributor/lanes').set(dist).expect(200)),
+    ];
+    const res = await http().get('/api/shop/home').set(shop).expect(200);
+    expect(res.headers['server-timing']).toMatch(/^app;dur=\d/);
+    if (process.env.SPEED_OUT) require('fs').writeFileSync(process.env.SPEED_OUT, results.map((r) => `${r.label}: p50 ${r.p50} ms, p95 ${r.p95} ms`).join(' · '));
+    for (const r of results) expect(r.p95).toBeLessThan(r.label === 'search' ? 300 : 200);
+  });
 });

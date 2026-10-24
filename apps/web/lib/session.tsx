@@ -1,8 +1,8 @@
 'use client';
 
-import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useState } from 'react';
 import { Lang, MessageKey, t as translate } from '@medilink/core';
-import { api, clearSession, hasStoredSession } from './api';
+import { api, ApiError, clearSession, hasStoredSession } from './api';
 import { SystemStatus } from '@/components/SystemStatus';
 
 export interface Me {
@@ -32,10 +32,31 @@ interface SessionCtx {
 
 const Ctx = createContext<SessionCtx | null>(null);
 
+const ME_KEY = 'ml.me';
+
+function rememberedMe(): Me | null {
+  if (typeof window === 'undefined' || !hasStoredSession()) return null;
+  try {
+    const raw = localStorage.getItem(ME_KEY);
+    return raw ? (JSON.parse(raw) as Me) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function SessionProvider({ children }: { children: ReactNode }) {
+  // The logged-in user is remembered on the device, so screens draw at once on reload; /auth/me confirms it quietly.
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   const [lang, setLangState] = useState<Lang>('en');
+  useLayoutEffect(() => {
+    const m = rememberedMe();
+    if (m) {
+      setMe(m);
+      setLangState(m.lang);
+      setLoading(false);
+    }
+  }, []);
   const [toastMsg, setToast] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
@@ -48,8 +69,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const m = await api<Me>('/auth/me');
       setMe(m);
       setLangState(m.lang);
-    } catch {
-      setMe(null);
+      try {
+        localStorage.setItem(ME_KEY, JSON.stringify(m));
+      } catch {}
+    } catch (e) {
+      // Only a real "please log in again" ends the session; a network blip keeps the remembered user.
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        setMe(null);
+        try {
+          localStorage.removeItem(ME_KEY);
+        } catch {}
+      } else if (!rememberedMe()) setMe(null);
     } finally {
       setLoading(false);
     }
@@ -65,6 +95,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const setLang = (l: Lang) => {
     setLangState(l);
+    if (me) {
+      try {
+        localStorage.setItem(ME_KEY, JSON.stringify({ ...me, lang: l }));
+      } catch {}
+    }
     if (me) api('/auth/me/lang', { method: 'PUT', body: { lang: l } }).catch(() => {});
   };
 
@@ -106,6 +141,13 @@ export function useSession() {
   const c = useContext(Ctx);
   if (!c) throw new Error('useSession must be inside SessionProvider');
   return c;
+}
+
+/** The data each home screen needs, fetched while login finishes so the first screen is already filled. */
+export function homeDataFor(role: string): string[] {
+  if (role.startsWith('RETAILER')) return ['/shop/home', '/shop/cart'];
+  if (role.startsWith('DISTRIBUTOR')) return ['/distributor/dashboard', '/distributor/lanes', '/distributor/shops'];
+  return ['/admin/overview', '/admin/kyc', '/admin/sync-health', '/admin/orders', '/admin/audit', '/admin/licences'];
 }
 
 export function homeFor(role: string) {

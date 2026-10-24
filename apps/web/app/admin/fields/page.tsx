@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, peek } from '@/lib/api';
 import { useSession } from '@/lib/session';
 import { Icon } from '@/components/Icon';
 import { ConsoleShell } from '@/components/ConsoleShell';
@@ -28,7 +28,7 @@ export default function FieldsPage() {
   const { me, toast } = useSession();
   const canEdit = me?.role === 'SUPER_ADMIN' || me?.role === 'ADMIN_OPS';
   const [entity, setEntity] = useState<Entity>('PRODUCT');
-  const [rows, setRows] = useState<FieldDef[] | null>(null);
+  const [rows, setRows] = useState<FieldDef[] | null>(() => peek<FieldDef[]>('/admin/fields?entity=PRODUCT') ?? null);
   const [label, setLabel] = useState('');
   const [type, setType] = useState<FieldDef['type']>('TEXT');
   const [options, setOptions] = useState('');
@@ -82,7 +82,7 @@ export default function FieldsPage() {
               </thead>
               <tbody>
                 {rows?.map((f) => (
-                  <tr key={f.id} style={{ opacity: f.active ? 1 : 0.55 }}>
+                  <tr key={f.id} className={f.active ? undefined : 'off'}>
                     <td>
                       <b>{f.label}</b>
                       <div className="hint mono">{f.key}</div>
