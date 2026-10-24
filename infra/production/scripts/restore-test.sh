@@ -35,6 +35,7 @@ docker run -d --name "$name" --network none "${envs[@]}" -e POSTGRES_USER=medili
   "$image" postgres -c archive_mode=off -c listen_addresses='' >/dev/null || fail "restored database did not start"
 
 for _ in $(seq 1 200); do
+  [ "$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null)" = true ] || fail "restored database stopped during recovery"
   if docker exec "$name" psql -U medilink -d medilink -tAc "SELECT NOT pg_is_in_recovery()" 2>/dev/null | grep -q t; then break; fi
   sleep 3
 done
