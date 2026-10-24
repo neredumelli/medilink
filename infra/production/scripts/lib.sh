@@ -40,12 +40,16 @@ kuma_push() {
   curl -fsS -m 10 -G "$url" --data-urlencode "status=up" --data-urlencode "msg=${*:-ok}" >/dev/null 2>&1 || true
 }
 
-# Waits until the API answers its health check from inside the stack (and so has reached the database).
+# Waits until users can really reach MediLink: the API (and so the database) and the website answer
+# inside the stack, and both answer through Caddy over HTTPS.
+#   wait_healthy [seconds] [edge|internal]   internal = skip the HTTPS check (certificate or DNS not ready yet)
 wait_healthy() {
-  local timeout="${1:-120}" waited=0
+  local timeout="${1:-120}" mode="${2:-edge}" waited=0
+  local edge=(curl -kfsS -m 5 --resolve "${DOMAIN}:443:127.0.0.1" -o /dev/null)
   while [ "$waited" -lt "$timeout" ]; do
     if dc exec -T api wget -qO- http://127.0.0.1:4000/api/health >/dev/null 2>&1 \
-      && dc exec -T web wget -q --spider http://127.0.0.1:3000/login >/dev/null 2>&1; then
+      && dc exec -T web wget -q --spider http://127.0.0.1:3000/login >/dev/null 2>&1 \
+      && { [ "$mode" = internal ] || { "${edge[@]}" "https://${DOMAIN}/api/health" 2>/dev/null && "${edge[@]}" "https://${DOMAIN}/login" 2>/dev/null; }; }; then
       return 0
     fi
     sleep 3; waited=$((waited + 3))

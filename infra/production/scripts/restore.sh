@@ -30,7 +30,7 @@ case "$what" in
       || die "Restore FAILED. The old database files may be partly replaced; run this script again with an earlier target."
     dc up -d postgres
     dc up -d api web caddy
-    wait_healthy 180 || die "MediLink did not come back after the restore"
+    wait_healthy 180 internal || die "MediLink did not come back after the restore"
     # A restore starts a new timeline: take a fresh full backup so later restores have a clean base.
     "$(dirname "$0")/backup.sh" db full >/dev/null || true
     alert "✅ Database restored to $target. MediLink is running."

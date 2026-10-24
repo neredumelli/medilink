@@ -177,7 +177,10 @@ dc run --rm --no-deps -T api npx prisma migrate deploy
 # ------------------------------------------------------------------ 5. the app
 say "Starting MediLink"
 dc up -d api web caddy
-wait_healthy 180 || die "MediLink did not start. See: docker compose -f $ML_DIR/compose.yml logs api"
+wait_healthy 180 internal || die "MediLink did not start. See: docker compose -f $ML_DIR/compose.yml logs api"
+if ! wait_healthy 120; then
+  warn "MediLink is running, but https://$DOMAIN does not answer yet. Check that DNS points to this server and ports 80/443 are open; Caddy keeps trying to get the certificate by itself."
+fi
 
 say "First backups"
 [ -f "$ML_STATE/last-db-backup" ] || "$ML_DIR/scripts/backup.sh" db full
