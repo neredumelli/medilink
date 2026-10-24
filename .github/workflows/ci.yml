@@ -41,26 +41,26 @@ jobs:
       - name: API typecheck
         if: always()
         shell: bash
-        run: pnpm --filter @medilink/api typecheck 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash .github/report.sh /tmp/out.txt $code
+        run: set +e +o pipefail; pnpm --filter @medilink/api typecheck 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash .github/report.sh /tmp/out.txt $code
       - name: API end-to-end test
         if: always()
         shell: bash
-        run: pnpm --filter @medilink/api test 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash .github/report.sh /tmp/out.txt $code
+        run: set +e +o pipefail; pnpm --filter @medilink/api test 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash .github/report.sh /tmp/out.txt $code
       - name: API build
         if: always()
         run: pnpm --filter @medilink/api build
       - name: Web typecheck
         if: always()
         shell: bash
-        run: pnpm --filter @medilink/web typecheck 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash .github/report.sh /tmp/out.txt $code
+        run: set +e +o pipefail; pnpm --filter @medilink/web typecheck 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash .github/report.sh /tmp/out.txt $code
       - name: Web build
         if: always()
         shell: bash
-        run: pnpm --filter @medilink/web build 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash .github/report.sh /tmp/out.txt $code
+        run: set +e +o pipefail; pnpm --filter @medilink/web build 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash .github/report.sh /tmp/out.txt $code
       - name: Mobile typecheck
         if: always()
         shell: bash
-        run: pnpm --filter @medilink/mobile typecheck 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash .github/report.sh /tmp/out.txt $code
+        run: set +e +o pipefail; pnpm --filter @medilink/mobile typecheck 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash .github/report.sh /tmp/out.txt $code
 
   mobile:
     # Builds Android (AAB) and iOS (IPA) in Expo's cloud on release tags.

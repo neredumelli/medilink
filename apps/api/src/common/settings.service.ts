@@ -28,7 +28,8 @@ export interface Settings {
 const DEFAULTS: Settings = {
   maintenance: { on: false, message: '', until: null },
   minAppVersion: '0.1.0',
-  security: { admin2faRequired: true, adminIpAllowList: [] },
+  // Off by default on demo and development machines; production always forces it on (see get()).
+  security: { admin2faRequired: false, adminIpAllowList: [] },
 };
 const CACHE_MS = 5_000;
 
