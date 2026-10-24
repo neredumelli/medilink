@@ -19,6 +19,8 @@ async function bootstrap() {
   // rawBody is needed to verify sync-agent signatures
   const app = await NestFactory.create(AppModule, { rawBody: true });
   app.setGlobalPrefix('api');
+  // Behind Caddy: take the visitor's real IP from X-Forwarded-For (used by rate limits and the admin IP allow-list).
+  app.getHttpAdapter().getInstance().set('trust proxy', cfg.TRUST_PROXY);
   app.use(helmet());
   app.use(cookieParser());
   app.enableCors({ origin: cfg.CORS_ORIGINS.split(',').map((s) => s.trim()), credentials: true });

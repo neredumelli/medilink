@@ -12,6 +12,7 @@ export function AdminTabs() {
     { href: '/admin/products', label: 'Medicines' },
     { href: '/admin/fields', label: 'Data fields' },
     { href: '/admin/settings', label: 'Settings' },
+    { href: '/admin/security', label: 'My security' },
   ];
   return (
     <div className="seg" role="tablist" aria-label="Admin sections" style={{ background: 'rgba(255,255,255,.16)', flexWrap: 'wrap' }}>

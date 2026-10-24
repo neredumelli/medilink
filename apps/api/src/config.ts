@@ -14,6 +14,10 @@ const schema = z.object({
   MSG91_TEMPLATE_ID: z.string().optional(),
   OTP_TTL_SECONDS: z.coerce.number().default(300),
   OTP_MAX_ATTEMPTS: z.coerce.number().default(5),
+  /** Encrypts authenticator-app secrets. Falls back to JWT_REFRESH_SECRET; set its own value in production. */
+  DATA_ENCRYPTION_KEY: z.string().min(16).optional(),
+  /** Which proxies to trust for the visitor's IP (Express "trust proxy"). Caddy runs on the private Docker network. */
+  TRUST_PROXY: z.string().default('loopback, linklocal, uniquelocal'),
 });
 
 export type Config = z.infer<typeof schema>;

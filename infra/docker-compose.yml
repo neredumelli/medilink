@@ -18,6 +18,7 @@ services:
     env_file: ../.env
     environment:
       DATABASE_URL: postgresql://medilink:medilink@postgres:5432/medilink?schema=public
+    command: ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
     ports: ["4000:4000"]
     depends_on:
       postgres: { condition: service_healthy }
@@ -25,8 +26,6 @@ services:
 
   web:
     build: { context: .., dockerfile: apps/web/Dockerfile }
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:4000/api
     ports: ["3000:3000"]
     depends_on: [api]
     profiles: ["full"]

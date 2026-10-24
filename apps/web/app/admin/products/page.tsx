@@ -19,6 +19,7 @@ interface Row {
   salt: string;
   category: string;
   status: ProductStatus;
+  controlled: boolean;
   aliases: number;
   barcodes: number;
   distributors: number;
@@ -32,7 +33,7 @@ interface HistoryRow {
   at: string;
 }
 interface Detail {
-  product: { id: string; name: string; form: string; pack: string; salt: string; company: string; hsn: string | null; gstPct: number; schedule: string; category: string; mrpPaise: number; status: ProductStatus; statusNote: string | null; statusAt: string | null; extra: Record<string, unknown> };
+  product: { id: string; name: string; form: string; pack: string; salt: string; company: string; hsn: string | null; gstPct: number; schedule: string; ndps: boolean; controlled: boolean; category: string; mrpPaise: number; status: ProductStatus; statusNote: string | null; statusAt: string | null; extra: Record<string, unknown> };
   aliases: { id: string; alias: string }[];
   barcodes: string[];
   stock: { distributor: string; externalCode: string; stockQty: number; ptrPaise: number; nearestExpiry: string | null; batches: { batchNo: string; expiry: string; stockQty: number }[] }[];
@@ -59,6 +60,8 @@ const FIELD_NAME: Record<string, string> = {
   pack: 'Pack',
   gstPct: 'GST %',
   category: 'Category',
+  schedule: 'Schedule',
+  ndps: 'Narcotic (NDPS)',
 };
 const money = new Set(['mrpPaise', 'ptrPaise']);
 const show = (k: string, v: unknown) => (v === null || v === undefined ? '—' : money.has(k) && typeof v === 'number' ? inr(v) : typeof v === 'object' ? Object.entries(v as object).map(([a, b]) => `${a}: ${b}`).join(', ') || '—' : String(v));
@@ -83,6 +86,8 @@ export default function ProductsPage() {
   const [sel, setSel] = useState<Detail | null>(null);
   const [newStatus, setNewStatus] = useState<ProductStatus>('ACTIVE');
   const [note, setNote] = useState('');
+  const [schedule, setSchedule] = useState('NONE');
+  const [ndps, setNdps] = useState(false);
   const [alias, setAlias] = useState('');
   const [code, setCode] = useState('');
   const [extra, setExtra] = useState<Record<string, string>>({});
@@ -103,6 +108,8 @@ export default function ProductsPage() {
     setSel(d);
     setNewStatus(d.product.status);
     setNote(d.product.statusNote ?? '');
+    setSchedule(d.product.schedule);
+    setNdps(d.product.ndps);
     setExtra(Object.fromEntries(Object.entries(d.product.extra ?? {}).map(([k, v]) => [k, String(v)])));
   };
 
@@ -215,6 +222,7 @@ export default function ProductsPage() {
                     <td>{r.barcodes}</td>
                     <td>{r.distributors}</td>
                     <td>
+                      {r.controlled && <span className="pill c-coral">Sched. X / NDPS</span>}{' '}
                       <span className={`pill ${STATUS_PILL[r.status]}`}>{r.status === 'ACTIVE' ? 'active' : PRODUCT_STATUS_LABEL[r.status].split(' ')[0]!.toLowerCase()}</span>
                     </td>
                   </tr>
@@ -281,6 +289,41 @@ export default function ProductsPage() {
                       onClick={() => run(() => api(`/admin/products/${id}/status`, { body: { status: newStatus, note: note || undefined } }), newStatus === 'ACTIVE' ? `${sel.product.name} can be ordered again` : `${sel.product.name}: ${PRODUCT_STATUS_LABEL[newStatus].toLowerCase()}`)}
                     >
                       Save status
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* ---------------- schedule and narcotic flag */}
+              <div className="box" style={{ border: sel.product.controlled ? '2px solid var(--coral)' : undefined }}>
+                <b>Drug schedule</b>
+                <p className="hint" style={{ margin: 0 }}>
+                  {sel.product.controlled
+                    ? 'Never orderable on MediLink: Schedule X and narcotic (NDPS) medicines are blocked in search, carts and orders, and by the database itself.'
+                    : 'Schedule H and H1 are shown to shops. Setting Schedule X or narcotic blocks the medicine everywhere at once and removes it from every cart.'}
+                </p>
+                <div className="frow">
+                  <div className="field">
+                    <label htmlFor="psch">Schedule</label>
+                    <select id="psch" value={schedule} disabled={!canEdit} onChange={(e) => setSchedule(e.target.value)}>
+                      <option value="NONE">None (OTC)</option>
+                      <option value="H">Schedule H</option>
+                      <option value="H1">Schedule H1</option>
+                      <option value="X">Schedule X: not orderable</option>
+                    </select>
+                  </div>
+                  <label className="row" style={{ gap: 8, fontWeight: 700 }}>
+                    <input type="checkbox" checked={ndps} disabled={!canEdit} onChange={(e) => setNdps(e.target.checked)} /> Narcotic / psychotropic (NDPS Act): not orderable
+                  </label>
+                </div>
+                {canEdit && (
+                  <div className="actions">
+                    <button
+                      className={`btn small ${schedule === 'X' || ndps ? 'danger' : 'primary'}`}
+                      disabled={schedule === sel.product.schedule && ndps === sel.product.ndps}
+                      onClick={() => run(() => api(`/admin/products/${id}/control`, { body: { schedule, ndps } }), schedule === 'X' || ndps ? `${sel.product.name} is blocked from ordering` : `${sel.product.name}: schedule saved`)}
+                    >
+                      Save schedule
                     </button>
                   </div>
                 )}

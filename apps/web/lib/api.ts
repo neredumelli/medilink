@@ -19,6 +19,8 @@ export class ApiError extends Error {
     public issues?: { field: string; message: string }[],
     /** Reference code to quote to support, e.g. ML-7F3K2. */
     public ref?: string,
+    /** The full error body, for screens that react to extra flags. */
+    public body?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -84,7 +86,7 @@ const SLOW_MS = 5_000;
  *   offline (user's internet) · down (our server unreachable / 502-504) · maintenance (503) · update (426).
  */
 export async function api<T = any>(path: string, opts: { method?: string; body?: unknown; headers?: Record<string, string> } = {}): Promise<T> {
-  if (!accessToken && path !== '/auth/otp/request' && path !== '/auth/otp/verify') await refresh();
+  if (!accessToken && !['/auth/otp/request', '/auth/otp/verify', '/auth/2fa/verify'].includes(path)) await refresh();
   const doFetch = () => {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -123,7 +125,15 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
     if (res.status === 503 && body.maintenance) setSystem({ kind: 'maintenance', message: msg, until: body.until ?? null });
     else if (res.status === 426 || body.updateRequired) setSystem({ kind: 'update' });
     else if (res.status === 502 || res.status === 503 || res.status === 504) setSystem({ kind: 'down', ref: body.ref });
-    throw new ApiError(res.status, msg, body.issues, body.ref);
+    else if (res.status === 403 && typeof window !== 'undefined') {
+      // Admins: 2-step login has to be set up, or this session was made before it was switched on.
+      if (body.twoFactorSetup && !window.location.pathname.startsWith('/admin/security')) window.location.assign('/admin/security');
+      if (body.twoFactorLogin) {
+        await clearSession();
+        window.location.assign('/login');
+      }
+    }
+    throw new ApiError(res.status, msg, body.issues, body.ref, body);
   }
   if (getSystem().kind !== 'ok') setSystem({ kind: 'ok' });
   return res.status === 204 ? (undefined as T) : res.json();

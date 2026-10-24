@@ -1,0 +1,24 @@
+# Uptime Kuma: watches MediLink from OUTSIDE and hosts the public status page.
+# Run this on a second small machine (any provider, different from the main server), so the status
+# page and the alarms keep working when the main server is down.
+#   cp .env.example .env   (set STATUS_DOMAIN and ACME_EMAIL)   then:   docker compose up -d
+name: medilink-status
+services:
+  kuma:
+    image: louislam/uptime-kuma:1.23.16
+    restart: unless-stopped
+    volumes: [kuma:/app/data]
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      STATUS_DOMAIN: ${STATUS_DOMAIN:?set STATUS_DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+volumes:
+  kuma:
+  caddy_data:

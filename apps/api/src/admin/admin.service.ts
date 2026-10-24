@@ -170,7 +170,7 @@ export class AdminService {
       this.prisma.auditLog.findMany({ where: { OR: [{ actorId: id }, { entity: 'User', entityId: id }] }, orderBy: { createdAt: 'desc' }, take: 40 }),
     ]);
     return {
-      user: { id: u.id, userCode: u.userCode, name: u.name, mobile: u.mobile, role: u.role, status: u.status, lang: u.lang, createdAt: u.createdAt, termsAcceptedAt: u.termsAcceptedAt },
+      user: { id: u.id, userCode: u.userCode, name: u.name, mobile: u.mobile, role: u.role, status: u.status, lang: u.lang, createdAt: u.createdAt, termsAcceptedAt: u.termsAcceptedAt, twoFactorOn: !!u.totpEnabledAt },
       business: u.retailer ? { type: 'shop', name: u.retailer.name, area: u.retailer.area, kycStatus: u.retailer.kycStatus } : u.distributor ? { type: 'distributor', name: u.distributor.name, area: u.distributor.area, kycStatus: u.distributor.kycStatus } : null,
       canDo: permissionsFor(u.role),
       devices: sessions,
@@ -206,6 +206,17 @@ export class AdminService {
     await this.prisma.user.update({ where: { id }, data: { role } });
     await this.audit.log({ actorId: admin.sub, actorLabel: admin.name, action: 'user.role', entity: 'User', entityId: id, before: { role: before.role }, after: { role } });
     return { id, role };
+  }
+
+  async resetTwoFactor(admin: AuthUser, id: string) {
+    if (id === admin.sub) throw new BadRequestException('Ask another super admin to reset your own 2-step login');
+    const u = await this.prisma.user.findUnique({ where: { id } });
+    if (!u) throw new NotFoundException('User not found');
+    if (!u.totpEnabledAt) throw new BadRequestException('2-step login is not on for this user');
+    await this.prisma.user.update({ where: { id }, data: { totpSecret: null, totpEnabledAt: null, totpLastStep: null, recoveryCodes: [] } });
+    const n = await this.revokeSessions(id);
+    await this.audit.log({ actorId: admin.sub, actorLabel: admin.name, action: 'user.reset_2fa', entity: 'User', entityId: id, after: { devicesLoggedOut: n } });
+    return { id, twoFactorOn: false, devicesLoggedOut: n };
   }
 
   private async revokeSessions(userId: string) {

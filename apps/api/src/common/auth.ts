@@ -12,6 +12,8 @@ import { JwtService } from '@nestjs/jwt';
 import type { Role } from '@prisma/client';
 import { config } from '../config';
 import { PrismaService } from '../prisma.service';
+import { SettingsService } from './settings.service';
+import { ipAllowed } from './ip';
 
 export interface AuthUser {
   sub: string; // user id
@@ -19,10 +21,16 @@ export interface AuthUser {
   name: string;
   retailerId: string | null;
   distributorId: string | null;
+  /** true when this login passed the authenticator-app step (admins) */
+  mfa?: boolean;
 }
 
 export const IS_PUBLIC = 'isPublic';
 export const Public = () => SetMetadata(IS_PUBLIC, true);
+
+/** Routes an admin may use before finishing 2-step login setup (e.g. the setup screen itself). */
+export const ALLOW_WITHOUT_2FA = 'allowWithout2fa';
+export const AllowWithout2fa = () => SetMetadata(ALLOW_WITHOUT_2FA, true);
 
 export const ROLES = 'roles';
 export const Roles = (...roles: Role[]) => SetMetadata(ROLES, roles);
@@ -42,6 +50,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly jwt: JwtService,
     private readonly reflector: Reflector,
     private readonly prisma: PrismaService,
+    private readonly settings: SettingsService,
   ) {}
 
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
@@ -58,9 +67,27 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Your session has expired. Please log in again');
     }
     // Look the user up on every request so a suspension or role change applies immediately.
-    const user = await this.prisma.user.findUnique({ where: { id: payload.sub }, select: { status: true, role: true, name: true, retailerId: true, distributorId: true } });
+    const user = await this.prisma.user.findUnique({ where: { id: payload.sub }, select: { status: true, role: true, name: true, retailerId: true, distributorId: true, totpEnabledAt: true } });
     if (!user || user.status === 'SUSPENDED') throw new UnauthorizedException('This account is suspended. Please call support.');
-    req.user = { sub: payload.sub, role: user.role, name: user.name, retailerId: user.retailerId, distributorId: user.distributorId } satisfies AuthUser;
+    req.user = { sub: payload.sub, role: user.role, name: user.name, retailerId: user.retailerId, distributorId: user.distributorId, mfa: payload.mfa === true } satisfies AuthUser;
+
+    if (ADMIN_ROLES.includes(user.role)) {
+      const { security } = await this.settings.get();
+      // Admin screens can be limited to the office network.
+      if (!ipAllowed(req.ip, security.adminIpAllowList)) {
+        throw new ForbiddenException({ message: 'Admin access is not allowed from this network. Please connect from the office.', ipBlocked: true });
+      }
+      // 2-step login: required by setting (always in production), and always once an admin has switched it on.
+      const needs2fa = security.admin2faRequired || !!user.totpEnabledAt;
+      const exempt = this.reflector.getAllAndOverride<boolean>(ALLOW_WITHOUT_2FA, [ctx.getHandler(), ctx.getClass()]);
+      if (needs2fa && payload.mfa !== true && !exempt) {
+        throw new ForbiddenException(
+          user.totpEnabledAt
+            ? { message: 'Please log in again with your authenticator app code.', twoFactorLogin: true }
+            : { message: 'Set up 2-step login with an authenticator app to use the admin panel.', twoFactorSetup: true },
+        );
+      }
+    }
     return true;
   }
 }

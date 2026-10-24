@@ -94,7 +94,7 @@ export class ShopService {
             lines: [],
           })
           .get(r.distributorId);
-      const blockedMsg = productBlockedMessage(r.product.name, r.product.status, r.product.statusNote);
+      const blockedMsg = productBlockedMessage(r.product.name, r.product.status, r.product.statusNote, r.product);
       g.lines.push({
         productId: r.productId,
         blocked: blockedMsg,
@@ -113,7 +113,7 @@ export class ShopService {
         alternatives: (offers.get(r.productId) ?? []).filter((o) => o.stockQty > 0).map((o) => ({ distributorId: o.distributorId, name: o.distributorName, netRatePaise: o.netRatePaise })),
       });
     }
-    let blocked = rows.some((r) => r.product.status !== 'ACTIVE');
+    let blocked = rows.some((r) => !!productBlockedMessage(r.product.name, r.product.status, r.product.statusNote, r.product));
     const out = [...groups.values()].map((g) => {
       const totals = orderTotals(g.lines.map((l: any) => ({ ratePaise: l.ratePaise, qty: l.qty, gstPct: l.gstPct })));
       const overCredit = totals.total > g.creditAvailablePaise;
@@ -128,7 +128,7 @@ export class ShopService {
   async setCartItem(retailerId: string, productId: string, qty: number, distributorId?: string) {
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!product) throw new NotFoundException('Medicine not found');
-    const blockedMsg = productBlockedMessage(product.name, product.status, product.statusNote);
+    const blockedMsg = productBlockedMessage(product.name, product.status, product.statusNote, product);
     if (blockedMsg) throw new ConflictException(blockedMsg);
     const offers = (await this.catalog.offersFor(retailerId, [productId])).get(productId) ?? [];
     let chosen: string;
@@ -159,7 +159,7 @@ export class ShopService {
     for (const it of items) {
       const product = await this.prisma.product.findUnique({ where: { id: it.productId } });
       if (!product) continue;
-      if (product.status !== 'ACTIVE') {
+      if (productBlockedMessage(product.name, product.status, product.statusNote, product)) {
         missing.push(product.name);
         continue;
       }
@@ -262,7 +262,7 @@ export class ShopService {
       const cart = await tx.cartItem.findMany({ where: { retailerId }, include: { product: true } });
       if (cart.length === 0) throw new BadRequestException('Your cart is empty');
       for (const c of cart) {
-        const msg = productBlockedMessage(c.product.name, c.product.status, c.product.statusNote);
+        const msg = productBlockedMessage(c.product.name, c.product.status, c.product.statusNote, c.product);
         if (msg) throw new ConflictException(`${msg} Please remove it from your cart.`);
       }
 

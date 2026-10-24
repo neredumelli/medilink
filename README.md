@@ -42,7 +42,8 @@ Open http://localhost:3000. With `OTP_PROVIDER=console`, the 6-digit login code 
 | Distributor: Sri Venkateswara Pharma (Marg) | 9876500001 |
 | Distributor: Lakshmi Medical Agencies (Tally) | 9876500002 |
 | Distributor: Deccan Health (Busy, sync shown offline) | 9876500003 |
-| Platform admin | 9000000001 |
+| Platform admin (super admin) | 9000000001 |
+| Operations admin | 9000000002 |
 
 Shops waiting for KYC approval: Navya Pharmacy (9848066666) and Sri Rama Medicals (9848077777).
 
@@ -53,6 +54,15 @@ pnpm --filter @medilink/sync-agent test  # agent incl. a full cycle against a fa
 pnpm --filter @medilink/api test         # end-to-end order flow (needs Postgres with the seed)
 ```
 
+## Run it in production
+Everything for a real server (HTTPS, backups, point-in-time restore, monitoring, deploy with automatic
+rollback) is in [`infra/production`](infra/production/README.md): one command installs it on a fresh
+Ubuntu server. Incident procedures: [`docs/runbooks.md`](docs/runbooks.md).
+
+Safety built in for launch: Schedule X and narcotic medicines can never be ordered (enforced by the
+database too); admins log in with a second step from an authenticator app; every shop and distributor
+request runs under PostgreSQL row-level security.
+
 ## Release to the stores
 `apps/mobile` uses Expo EAS. Set `projectId` in `app.json` and the App Store Connect ID in `eas.json`, then run `pnpm --filter @medilink/mobile build:production` and `submit`. CI builds both platforms on `v*` tags. You need a Google Play Console account and an Apple Developer **organisation** account (D-U-N-S number).
 
@@ -60,6 +70,6 @@ pnpm --filter @medilink/api test         # end-to-end order flow (needs Postgres
 - **Phase 2:** direct Marg/Tally adapters, OCR for photos of handwritten lists, WhatsApp ordering, search tuned on real catalogue data
 - **Phase 3:** offline mode on the phone, push notifications, fingerprint/Face ID login, Sales Rep app, distributor companion app
 - **Phase 4:** UPI payments (Razorpay), notification delivery worker, call-center console, subscriptions, reports
-- **Phase 5:** load and security testing, monitoring, backups, store launch
+- **Phase 5:** load and security testing, store launch (monitoring and backups are done)
 
 Before launch, also replace the placeholder domain `medilink.example` and add a real support phone number (`NEXT_PUBLIC_SUPPORT_PHONE`).

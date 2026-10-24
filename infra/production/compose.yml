@@ -1,0 +1,134 @@
+# MediLink production stack: Caddy (HTTPS) → web + API → PostgreSQL (with pgBackRest).
+# Managed by the scripts in ./scripts — see infra/production/README.md. Do not run "docker compose down -v".
+name: medilink
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "20m", max-file: "5" }
+
+
+services:
+  postgres:
+    image: ${MEDILINK_REGISTRY:-ghcr.io/neredumelli}/medilink-postgres:${MEDILINK_PG_VERSION:-${MEDILINK_VERSION:?MEDILINK_VERSION is not set}}
+    build: { context: ./postgres }
+    restart: unless-stopped
+    shm_size: 256mb
+    environment:
+      POSTGRES_USER: medilink
+      POSTGRES_DB: medilink
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+      BACKUP_S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+      BACKUP_S3_REGION: ${BACKUP_S3_REGION:-auto}
+      BACKUP_S3_KEY: ${BACKUP_S3_KEY:-}
+      BACKUP_S3_SECRET: ${BACKUP_S3_SECRET:-}
+      BACKUP_S3_PATH: ${BACKUP_S3_PATH:-/medilink}
+      BACKUP_S3_URI_STYLE: ${BACKUP_S3_URI_STYLE:-path}
+      BACKUP_CIPHER_PASS: ${BACKUP_CIPHER_PASS:-}
+      BACKUP_OFFSITE_DAYS: ${BACKUP_OFFSITE_DAYS:-90}
+    # Every change is archived within 5 minutes (archive_timeout), so at most 5 minutes of data can be lost.
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=pgbackrest --stanza=medilink archive-push %p
+      - -c
+      - archive_timeout=300
+      - -c
+      - max_connections=200
+      - -c
+      - shared_buffers=${PG_SHARED_BUFFERS:-512MB}
+      - -c
+      - log_min_duration_statement=1000
+      - -c
+      - log_lock_waits=on
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - pgbackrest:/var/lib/pgbackrest
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medilink -d medilink"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging: *logging
+
+  api:
+    image: ${MEDILINK_REGISTRY:-ghcr.io/neredumelli}/medilink-api:${MEDILINK_VERSION}
+    build: { context: ../.., dockerfile: apps/api/Dockerfile }
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_PORT: "4000"
+      DATABASE_URL: postgresql://medilink:${POSTGRES_PASSWORD}@postgres:5432/medilink?schema=public&connection_limit=${DB_POOL_SIZE:-30}&pool_timeout=10
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set JWT_ACCESS_SECRET in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set JWT_REFRESH_SECRET in .env}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?set DATA_ENCRYPTION_KEY in .env}
+      CORS_ORIGINS: https://${DOMAIN}
+      OTP_PROVIDER: ${OTP_PROVIDER:-msg91}
+      MSG91_AUTH_KEY: ${MSG91_AUTH_KEY:-}
+      MSG91_TEMPLATE_ID: ${MSG91_TEMPLATE_ID:-}
+      TRUST_PROXY: loopback, linklocal, uniquelocal
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      postgres: { condition: service_healthy }
+    logging: *logging
+
+  web:
+    image: ${MEDILINK_REGISTRY:-ghcr.io/neredumelli}/medilink-web:${MEDILINK_VERSION}
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_SUPPORT_PHONE: ${SUPPORT_PHONE:-}
+    restart: unless-stopped
+    depends_on: [api]
+    logging: *logging
+
+  caddy:
+    image: ${MEDILINK_REGISTRY:-ghcr.io/neredumelli}/medilink-caddy:${MEDILINK_VERSION}
+    build: { context: ./caddy }
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+      STATUS_PAGE_URL: ${STATUS_PAGE_URL:-}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [web, api]
+    logging: *logging
+
+  # One-off jobs (docker compose run --rm …), never running in the background.
+  restic:
+    image: restic/restic:0.17.3
+    profiles: ["jobs"]
+    environment:
+      RESTIC_REPOSITORY: ${RESTIC_REPOSITORY:-/backup/restic}
+      RESTIC_PASSWORD: ${RESTIC_PASSWORD:-}
+      AWS_ACCESS_KEY_ID: ${BACKUP_S3_KEY:-}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_S3_SECRET:-}
+      AWS_DEFAULT_REGION: ${BACKUP_S3_REGION:-auto}
+    volumes:
+      - uploads:/data/uploads:ro
+      - caddy_data:/data/caddy:ro
+      - ./.env:/data/config/medilink.env:ro
+      - restic_local:/backup/restic
+      - restic_cache:/root/.cache/restic
+    logging: *logging
+
+volumes:
+  pgdata:
+  pgbackrest:
+  uploads:
+  caddy_data:
+  caddy_config:
+  restic_local:
+  restic_cache:

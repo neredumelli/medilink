@@ -1,0 +1,92 @@
+# MediLink edge: HTTPS, compression, security headers, rate limits, and a friendly page when the app is down.
+{
+	email {$ACME_EMAIL}
+	order rate_limit before basic_auth
+	servers {
+		timeouts {
+			read_body 30s
+			write 60s
+			idle 2m
+		}
+	}
+}
+
+(protect) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+		-X-Powered-By
+	}
+	request_body {
+		max_size 12MB
+	}
+}
+
+{$DOMAIN} {
+	import protect
+
+	# Per visitor address. The API has its own finer limits; these stop floods before they reach it.
+	rate_limit {
+		zone otp {
+			match {
+				path /api/auth/otp/* /api/auth/2fa/*
+			}
+			key {remote_host}
+			events 30
+			window 10m
+		}
+		zone api {
+			match {
+				path /api/*
+			}
+			key {remote_host}
+			events 600
+			window 1m
+		}
+	}
+
+	handle /api/* {
+		reverse_proxy api:4000 {
+			lb_try_duration 5s
+			health_uri /api/health
+			health_interval 5s
+			health_timeout 3s
+		}
+	}
+
+	# The live status page lives on a separate machine so it works even when this one is down.
+	redir /status {$STATUS_PAGE_URL:https://status.example.com} 302
+
+	handle {
+		reverse_proxy web:3000 {
+			lb_try_duration 5s
+		}
+	}
+
+	# Only when Caddy cannot reach the app (crashed, restarting, deploying). The app's own
+	# "maintenance" answers come from the API and pass straight through.
+	handle_errors {
+		@apiDown {
+			path /api/*
+			expression `{err.status_code} in [502, 503, 504]`
+		}
+		handle @apiDown {
+			header Content-Type application/json
+			header Cache-Control no-store
+			respond `{"statusCode":503,"message":"We're having a technical problem. Please try again in a few minutes.","down":true,"ref":"ML-EDGE"}` 503
+		}
+		@pageDown expression `{err.status_code} in [502, 503, 504]`
+		handle @pageDown {
+			root * /srv/fallback
+			rewrite * /index.html
+			header Cache-Control no-store
+			templates
+			file_server {
+				status 503
+			}
+		}
+	}
+}

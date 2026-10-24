@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>MediLink · back in a few minutes</title>
+<style>
+  :root { --bg: #f4f8f5; --card: #fff; --ink: #14332a; --muted: #4c6b61; --brand: #0f8a5f; --sun: #f5b301; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0e1915; --card: #15241f; --ink: #e8f3ee; --muted: #a5c2b7; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); color: var(--ink);
+         font: 17px/1.5 "Nunito", "Noto Sans Telugu", "Noto Sans Devanagari", system-ui, sans-serif; }
+  main { width: 100%; max-width: 460px; background: var(--card); border-radius: 22px; padding: 28px 24px; box-shadow: 0 10px 30px rgba(0,0,0,.08); text-align: center; }
+  .logo { width: 56px; height: 56px; border-radius: 16px; background: var(--brand); display: inline-grid; place-items: center; color: #fff; font-size: 30px; font-weight: 900; }
+  h1 { font-size: 22px; margin: 14px 0 6px; }
+  p { margin: 6px 0; color: var(--muted); }
+  .lang { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(127,127,127,.2); }
+  .lang p { margin: 4px 0; }
+  .btn { display: inline-block; margin-top: 18px; padding: 14px 22px; border-radius: 14px; border: 0; background: var(--brand); color: #fff; font-weight: 800; font-size: 17px; text-decoration: none; cursor: pointer; min-height: 48px; }
+  .link { display: inline-block; margin-top: 12px; color: var(--brand); font-weight: 700; }
+  .note { font-size: 14px; margin-top: 14px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--sun); margin-right: 6px; animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="logo" aria-hidden="true">+</div>
+  <h1>Technical problem: back in a few minutes</h1>
+  <p>MediLink is not answering right now. Our team has been alerted. Your cart and orders are safe.</p>
+  <div class="lang">
+    <p lang="te">సాంకేతిక సమస్య: కొన్ని నిమిషాల్లో తిరిగి వస్తాం. మీ కార్ట్ మరియు ఆర్డర్లు సురక్షితం.</p>
+    <p lang="hi">तकनीकी समस्या: कुछ मिनटों में वापस आएँगे। आपकी कार्ट और ऑर्डर सुरक्षित हैं।</p>
+  </div>
+  <button class="btn" type="button" onclick="location.reload()">Try again</button>
+  <br>
+  <a class="link" href="{{env "STATUS_PAGE_URL"}}" rel="noopener">See live status</a>
+  <p class="note"><span class="dot" aria-hidden="true"></span><span id="retry">Checking again by itself every 30 seconds.</span></p>
+</main>
+<script>
+  // Reopen MediLink as soon as it answers again.
+  setInterval(function () {
+    fetch('/api/health', { cache: 'no-store' }).then(function (r) { if (r.ok) location.reload(); }).catch(function () {});
+  }, 30000);
+</script>
+</body>
+</html>

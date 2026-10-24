@@ -32,7 +32,7 @@ export function todayDate(now = new Date()) {
 export const licensedDistributor = (now = new Date()): Prisma.DistributorWhereInput => ({ OR: [{ drugLicenceExpiry: null }, { drugLicenceExpiry: { gte: todayDate(now) } }] });
 
 export interface ProductCard {
-  product: Pick<Product, 'id' | 'name' | 'form' | 'pack' | 'salt' | 'company' | 'schedule' | 'category' | 'mrpPaise' | 'gstPct' | 'status' | 'statusNote'>;
+  product: Pick<Product, 'id' | 'name' | 'form' | 'pack' | 'salt' | 'company' | 'schedule' | 'ndps' | 'category' | 'mrpPaise' | 'gstPct' | 'status' | 'statusNote'>;
   /** Why this medicine cannot be ordered (banned, recalled, discontinued); null when it can. */
   blocked: string | null;
   usualQty: number;
@@ -140,14 +140,14 @@ export class CatalogService {
       const p = byId.get(id);
       if (!p) continue;
       const qty = usual.get(id) ?? 10;
-      const blocked = productBlockedMessage(p.name, p.status, p.statusNote);
+      const blocked = productBlockedMessage(p.name, p.status, p.statusNote, p);
       const list = blocked ? [] : offers.get(id) ?? [];
       const best = blocked ? null : pickBest(CatalogService.toCoreOffers(id, list), qty, { gstPct: p.gstPct });
       const unlinkedWithStock = blocked
         ? 0
         : await this.prisma.distributorItem.count({ where: { productId: id, stockQty: { gt: 0 }, distributorId: { notIn: linkedIds }, distributor: { kycStatus: 'APPROVED', ...licensedDistributor() } } });
       cards.push({
-        product: { id: p.id, name: p.name, form: p.form, pack: p.pack, salt: p.salt, company: p.company, schedule: p.schedule, category: p.category, mrpPaise: p.mrpPaise, gstPct: p.gstPct, status: p.status, statusNote: p.statusNote },
+        product: { id: p.id, name: p.name, form: p.form, pack: p.pack, salt: p.salt, company: p.company, schedule: p.schedule, ndps: p.ndps, category: p.category, mrpPaise: p.mrpPaise, gstPct: p.gstPct, status: p.status, statusNote: p.statusNote },
         blocked,
         usualQty: qty,
         offers: list,
@@ -161,7 +161,7 @@ export class CatalogService {
 
   /** Same composition, in stock at a linked distributor — shown when something is out everywhere. */
   async substitutes(retailerId: string, p: Product) {
-    const same = await this.prisma.product.findMany({ where: { salt: { equals: p.salt, mode: 'insensitive' }, id: { not: p.id }, status: 'ACTIVE' }, take: 5 });
+    const same = await this.prisma.product.findMany({ where: { salt: { equals: p.salt, mode: 'insensitive' }, id: { not: p.id }, status: 'ACTIVE', ndps: false, schedule: { not: 'X' } }, take: 5 });
     if (same.length === 0) return [];
     const offers = await this.offersFor(retailerId, same.map((s) => s.id));
     return same

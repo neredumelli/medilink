@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from './audit.service';
-import { AuthUser } from './auth';
+import type { AuthUser } from './auth';
+import { config } from '../config';
 
 export interface MaintenanceSetting {
   on: boolean;
@@ -11,12 +12,25 @@ export interface MaintenanceSetting {
   until: string | null;
 }
 
+export interface SecuritySetting {
+  /** Admins must use an authenticator app. Always true in production, whatever is stored. */
+  admin2faRequired: boolean;
+  /** When not empty, admin screens only work from these addresses / IPv4 ranges. */
+  adminIpAllowList: string[];
+}
+
 export interface Settings {
   maintenance: MaintenanceSetting;
   minAppVersion: string;
+  security: SecuritySetting;
 }
 
-const DEFAULTS: Settings = { maintenance: { on: false, message: '', until: null }, minAppVersion: '0.1.0' };
+const DEFAULTS: Settings = {
+  maintenance: { on: false, message: '', until: null },
+  minAppVersion: '0.1.0',
+  // Off by default on demo and development machines; production always forces it on (see get()).
+  security: { admin2faRequired: false, adminIpAllowList: [] },
+};
 const CACHE_MS = 5_000;
 
 /** Admin-editable settings, cached for a few seconds so every request can check them cheaply. */
@@ -36,7 +50,10 @@ export class SettingsService {
     const value: Settings = {
       maintenance: { ...DEFAULTS.maintenance, ...((map.maintenance as object) ?? {}) },
       minAppVersion: typeof map.minAppVersion === 'string' ? map.minAppVersion : DEFAULTS.minAppVersion,
+      security: { ...DEFAULTS.security, ...((map.security as object) ?? {}) },
     };
+    // A real install never lets admins in without the second step.
+    if (config().NODE_ENV === 'production') value.security.admin2faRequired = true;
     this.cache = { at: Date.now(), value };
     return value;
   }

@@ -16,8 +16,24 @@ export const PRODUCT_STATUS_LABEL: Record<ProductStatus, string> = {
 
 export const canOrderProduct = (s: ProductStatus | string) => s === 'ACTIVE';
 
+/**
+ * Schedule X and narcotic / psychotropic (NDPS Act) medicines need special registers and licences
+ * that a B2B ordering app cannot verify, so MediLink never offers or accepts them.
+ */
+export function isControlledMedicine(p: { schedule?: string | null; ndps?: boolean | null }): boolean {
+  return p.schedule === 'X' || p.ndps === true;
+}
+
+export const CONTROLLED_MESSAGE = 'Schedule X and narcotic medicines cannot be ordered on MediLink. Please order them directly from your distributor with the required paperwork.';
+
 /** The sentence a shop sees when a medicine cannot be ordered. */
-export function productBlockedMessage(name: string, status: ProductStatus | string, note?: string | null): string | null {
+export function productBlockedMessage(
+  name: string,
+  status: ProductStatus | string,
+  note?: string | null,
+  controlled?: { schedule?: string | null; ndps?: boolean | null },
+): string | null {
+  if (controlled && isControlledMedicine(controlled)) return `${name}: ${CONTROLLED_MESSAGE}`;
   if (status === 'ACTIVE') return null;
   const why =
     status === 'BANNED' ? `${name} is banned by the government and cannot be ordered.` : status === 'RECALLED' ? `${name} has been recalled and cannot be ordered.` : `${name} is discontinued by the company.`;

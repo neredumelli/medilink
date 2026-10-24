@@ -14,6 +14,8 @@ export interface Me {
   lang: Lang;
   retailer: { id: string; name: string; area: string; kycStatus: string; gstin: string | null } | null;
   distributor: { id: string; name: string; area: string; code: string; billingSoftware: string } | null;
+  /** Admins only: authenticator-app 2-step login. */
+  twoFactor: { enabled: boolean; enabledAt: string | null; recoveryCodesLeft: number } | null;
 }
 
 interface SessionCtx {

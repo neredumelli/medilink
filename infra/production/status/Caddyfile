@@ -1,0 +1,7 @@
+{
+	email {$ACME_EMAIL}
+}
+{$STATUS_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy kuma:3001
+}

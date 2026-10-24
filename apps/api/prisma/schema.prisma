@@ -133,6 +133,12 @@ model User {
   distributorId String?    @db.Uuid
   termsAcceptedAt DateTime?
   termsVersion  String?
+  /// Admin 2-step login: authenticator-app secret (encrypted), when it was switched on, last code step used
+  totpSecret    String?
+  totpEnabledAt DateTime?
+  totpLastStep  Int?
+  /// one-time recovery codes (hashed) for a lost phone
+  recoveryCodes String[]   @default([])
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 
@@ -253,6 +259,8 @@ model Product {
   hsn        String?  @db.VarChar(8)
   gstPct     Int      @default(5)
   schedule   Schedule @default(NONE)
+  /// Narcotic / psychotropic (NDPS Act). Like Schedule X, never orderable on MediLink (enforced by a database trigger).
+  ndps       Boolean  @default(false)
   category   Category @default(OTHER)
   mrpPaise   Int
   status     ProductStatus @default(ACTIVE)
@@ -433,6 +441,8 @@ model Session {
   userId     String    @db.Uuid
   tokenHash  String    @unique
   deviceName String?
+  /// true when the user passed 2-step login for this session
+  mfa        Boolean   @default(false)
   expiresAt  DateTime
   revokedAt  DateTime?
   createdAt  DateTime  @default(now())

@@ -102,6 +102,7 @@ INSERT INTO "Retailer" (id,name,area,pincode,address,gstin,dl20b,dl21b,pan,"kycS
 INSERT INTO "Retailer" (id,name,area,pincode,address,gstin,dl20b,dl21b,pan,"kycStatus","updatedAt") VALUES ('87ddc3ad-17de-5ca6-a199-00ef212c7b0d','Navya Pharmacy','Madhapur','500081','Plot 41, Ayyappa Society, Madhapur','36AAKFN4521Q1ZR','TS/HYD/2024/20B-7844','TS/HYD/2024/21B-7845','AAKFN4521Q','PENDING',NOW());
 INSERT INTO "Retailer" (id,name,area,pincode,address,gstin,dl20b,dl21b,pan,"kycStatus","updatedAt") VALUES ('a4be206f-1dda-5064-8b19-518f995648cb','Sri Rama Medicals','Uppal','500039','2-4-88, Uppal Main Road','36BQRPS7781K1ZO','TS/HYD/2024/20B-8854',NULL,'BQRPS7781K','PENDING',NOW());
 INSERT INTO "User" (id,"userCode",mobile,name,role,status,"retailerId","distributorId","termsAcceptedAt","termsVersion","updatedAt") VALUES ('2093e5ad-6d27-5200-a143-2043c16f5c9d','MLA-00001','9000000001','Platform Admin','SUPER_ADMIN','ACTIVE',NULL,NULL,NOW(),'2026-10',NOW());
+INSERT INTO "User" (id,"userCode",mobile,name,role,status,"retailerId","distributorId","termsAcceptedAt","termsVersion","updatedAt") VALUES ('7c1e9a40-3b2d-4f5e-8a6b-9c0d1e2f3a4b','MLA-00002','9000000002','Operations Desk','ADMIN_OPS','ACTIVE',NULL,NULL,NOW(),'2026-10',NOW());
 INSERT INTO "User" (id,"userCode",mobile,name,role,status,"retailerId","distributorId","termsAcceptedAt","termsVersion","updatedAt") VALUES ('60893412-b38b-5841-a3eb-e320813e59ad','MLR-20417','9848012345','Srinivas (Annapurna Medicals)','RETAILER_OWNER','ACTIVE','3dff5988-993a-5a35-ad55-b4b7bab53a24',NULL,NOW(),'2026-10',NOW());
 INSERT INTO "User" (id,"userCode",mobile,name,role,status,"retailerId","distributorId","termsAcceptedAt","termsVersion","updatedAt") VALUES ('abacc056-7b7b-5fa2-9571-c63c2d13d759','MLR-20418','9848012346','Salma','RETAILER_STAFF','ACTIVE','3dff5988-993a-5a35-ad55-b4b7bab53a24',NULL,NOW(),'2026-10',NOW());
 INSERT INTO "User" (id,"userCode",mobile,name,role,status,"retailerId","distributorId","termsAcceptedAt","termsVersion","updatedAt") VALUES ('486d476d-3bcb-58a5-b960-94cede0e4c2a','MLR-20431','9848022222','Sai Kumar','RETAILER_OWNER','ACTIVE','40985bf5-6c41-51f3-83df-43524e521762',NULL,NOW(),'2026-10',NOW());
@@ -228,6 +229,13 @@ INSERT INTO "CustomField" (id,entity,key,label,type,options,required,"sortOrder"
 UPDATE "Product" SET extra = '{"storage":"Room temperature"}' WHERE id IN ('0a11dc41-5aac-5470-b91c-d94e12ed5630','dfe8c276-fb0c-5aa2-88d7-151d4065f2f9');
 UPDATE "Retailer" SET extra = '{"weekly_off":"Sunday"}' WHERE id = '3dff5988-993a-5a35-ad55-b4b7bab53a24';
 UPDATE "Distributor" SET extra = '{"order_cutoff":"4:00 pm"}' WHERE code = 'SVP';
+
+-- A Schedule X medicine in the catalogue and in stock: MediLink must never offer or accept it.
+INSERT INTO "Product" (id,name,form,pack,salt,company,hsn,"gstPct",schedule,category,"mrpPaise","searchText","updatedAt") VALUES ('a7c3e1d2-5b4f-4c6a-9e8d-1f2a3b4c5d6e','Addwize 10','Tab','10s','Methylphenidate 10 mg','Sun Pharma','30049099',12,'X','OTHER',9800,'addwize 10 methylphenidate 10 mg sun pharma',NOW());
+INSERT INTO "DistributorItem" (id,"distributorId","productId","externalCode","externalName","stockQty","ptrPaise","mrpPaise","discountPct","nearestExpiry","mapConfidence","updatedAt") VALUES ('c4d5e6f7-0a1b-4c2d-8e3f-4a5b6c7d8e9f','b2971842-8470-5a33-b32d-6edf408f3b13','a7c3e1d2-5b4f-4c6a-9e8d-1f2a3b4c5d6e','SVP1019','ADDWIZE 10 TAB',40,7000,9800,0,'2027-12-01',100,NOW());
+
+-- Demo only: admins may log in without the authenticator app here. A real install always requires it.
+INSERT INTO "AppSetting" (key,value,"updatedAt") VALUES ('security','{"admin2faRequired":false,"adminIpAllowList":[]}',NOW());
 
 SELECT setval('order_number_seq', 10240);
 COMMIT;
