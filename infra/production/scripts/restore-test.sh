@@ -30,9 +30,11 @@ docker run --rm --network none -u postgres "${envs[@]}" -e POSTGRES_USER=medilin
   || fail "pgBackRest could not restore"
 
 log "Starting the restored copy (it replays changes up to the newest archived one)…"
+# Recovery needs at least the live server's limits (PostgreSQL refuses lower ones).
+live_max_conn="$(psql_ml -tAc 'SHOW max_connections' 2>/dev/null | tr -d '[:space:]')"
 docker run -d --name "$name" --network none "${envs[@]}" -e POSTGRES_USER=medilink -e POSTGRES_PASSWORD=unused \
   -v "$vol":/var/lib/postgresql/data -v medilink_pgbackrest:/var/lib/pgbackrest:ro \
-  "$image" postgres -c archive_mode=off -c listen_addresses='' >/dev/null || fail "restored database did not start"
+  "$image" postgres -c archive_mode=off -c listen_addresses='' -c max_connections="${live_max_conn:-200}" >/dev/null || fail "restored database did not start"
 
 for _ in $(seq 1 200); do
   [ "$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null)" = true ] || fail "restored database stopped during recovery"
