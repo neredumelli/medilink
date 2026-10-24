@@ -386,7 +386,7 @@ describe('Shop → distributor order flow', () => {
     const oldOps = { Authorization: `Bearer ${first.accessToken}` };
     await http().get('/api/admin/overview').set(oldOps).expect(200);
     const setup = await http().post('/api/auth/2fa/setup').set(oldOps).expect(200);
-    expect(setup.body.otpauthUrl).toMatch(/^otpauth:\/\/totp\/MediLink:/);
+    expect(setup.body.otpauthUrl).toMatch(/^otpauth:\/\/totp\/MediLink%3AMLA-00002.*secret=[A-Z2-7]+.*issuer=MediLink/);
     expect(setup.body.qrSvgDataUrl).toMatch(/^data:image\/svg\+xml;base64,/);
     const secret: string = setup.body.secret;
     await http().post('/api/auth/2fa/enable').set(oldOps).send({ code: '000000' }).expect(400);

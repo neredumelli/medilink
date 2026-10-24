@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/.next
+**/.expo
+**/.turbo
+**/coverage
+**/*.log
+.git
+.env
+**/.env
+**/.env.local
+docs/screenshots
+tools/screenshots/node_modules
+infra/production/.env

@@ -1,0 +1,116 @@
+name: Production package
+# Installs the full production stack on a fresh runner exactly as on a real server (HTTPS, backups,
+# restore, deploy, automatic rollback) and proves each part works.
+on:
+  pull_request:
+  push: { branches: [main] }
+  workflow_dispatch:
+
+jobs:
+  install-and-drill:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      ML_NONINTERACTIVE: "1"
+      ML_SKIP_SYSTEM: "1"
+      ML_YES: "1"
+      QUIET_SUCCESS: "1"
+    defaults:
+      run:
+        shell: bash
+        working-directory: infra/production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scripts are valid
+        run: |
+          set -e
+          for f in scripts/*.sh; do bash -n "$f"; done
+          for f in postgres/*.sh; do sh -n "$f"; done
+          shellcheck -S error scripts/*.sh postgres/*.sh
+
+      - name: Install (builds the images on this machine)
+        env:
+          DOMAIN: localhost
+          ACME_EMAIL: ops@example.com
+          MSG91_AUTH_KEY: ci-not-real
+          MSG91_TEMPLATE_ID: ci-not-real
+          MEDILINK_REGISTRY: local
+          MEDILINK_VERSION: ci1
+          STATUS_PAGE_URL: https://status.example.com
+          ADMIN_MOBILE: "9000000009"
+          ADMIN_NAME: CI Admin
+        run: set +e +o pipefail; bash scripts/install.sh --build 2>&1 | tee /tmp/out.txt; code=${PIPESTATUS[0]}; bash ../../.github/report.sh /tmp/out.txt $code
+
+      - name: HTTPS site, API and security headers
+        run: |
+          set -euxo pipefail
+          curl -kfsS https://localhost/api/health | grep '"ok":true'
+          test "$(curl -ks -o /dev/null -w '%{http_code}' https://localhost/login)" = 200
+          curl -kfsS https://localhost/api/public/status | grep '"maintenance"'
+          curl -ksS -D - -o /dev/null https://localhost/login | grep -i '^strict-transport-security'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost/login)" = 308
+          # Production never sends a real OTP without a working SMS account; the message is friendly.
+          code=$(curl -ks -o /tmp/otp.json -w '%{http_code}' -H 'content-type: application/json' -d '{"mobile":"9000000009"}' https://localhost/api/auth/otp/request)
+          cat /tmp/otp.json; test "$code" = 503
+          docker compose exec -T postgres psql -U medilink -d medilink -tAc "SELECT name FROM \"User\" WHERE role='SUPER_ADMIN'" | grep 'CI Admin'
+
+      - name: Friendly page while the app is down
+        run: |
+          set -euxo pipefail
+          docker compose stop api
+          test "$(curl -ks -o /tmp/api.json -w '%{http_code}' https://localhost/api/health)" = 503
+          grep '"down":true' /tmp/api.json
+          docker compose stop web
+          test "$(curl -ks -o /tmp/page.html -w '%{http_code}' https://localhost/shop)" = 503
+          grep 'back in a few minutes' /tmp/page.html
+          grep 'https://status.example.com' /tmp/page.html
+          docker compose start api web
+          for i in $(seq 1 40); do curl -kfsS https://localhost/api/health >/dev/null 2>&1 && break; sleep 3; done
+          curl -kfsS https://localhost/api/health
+
+      - name: Backups and the monthly restore test
+        run: |
+          set -euxo pipefail
+          bash scripts/backup.sh db full
+          bash scripts/backup.sh files
+          bash scripts/restore-test.sh
+          bash scripts/backup.sh list
+
+      - name: Point-in-time restore (undo a mistake)
+        run: |
+          set -euxo pipefail
+          q() { docker compose exec -T postgres psql -U medilink -d medilink -tAc "$1"; }
+          sleep 2
+          T=$(q "SELECT to_char(now() AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS') || '+00'" | tr -d '\r\n')
+          echo "Restore target: $T"
+          sleep 2
+          q "INSERT INTO \"AppSetting\" (key, value, \"updatedAt\") VALUES ('ci-mistake', '\"oops\"', now())"
+          test "$(q "SELECT count(*) FROM \"AppSetting\" WHERE key = 'ci-mistake'")" = 1
+          bash scripts/restore.sh db "$T"
+          test "$(q "SELECT count(*) FROM \"AppSetting\" WHERE key = 'ci-mistake'")" = 0
+          q "SELECT count(*) FROM \"User\" WHERE role='SUPER_ADMIN'" | grep -x 1
+          curl -kfsS https://localhost/api/health
+
+      - name: Deploy, automatic rollback of a broken release, manual rollback
+        run: |
+          set -euxo pipefail
+          for i in api web caddy; do docker tag local/medilink-$i:ci1 local/medilink-$i:ci2; done
+          bash scripts/deploy.sh ci2 --local
+          grep -x 'MEDILINK_VERSION=ci2' .env
+          # A release whose API crashes on start
+          printf 'FROM local/medilink-api:ci2\nCMD ["node", "-e", "process.exit(1)"]\n' | docker build -t local/medilink-api:bad -
+          for i in web caddy; do docker tag local/medilink-$i:ci2 local/medilink-$i:bad; done
+          if bash scripts/deploy.sh bad --local; then echo "deploy of a broken release should fail"; exit 1; fi
+          grep -x 'MEDILINK_VERSION=ci2' .env
+          curl -kfsS https://localhost/api/health
+          bash scripts/rollback.sh ci1
+          grep -x 'MEDILINK_VERSION=ci1' .env
+          curl -kfsS https://localhost/api/health
+
+      - name: Health check script
+        run: bash scripts/healthcheck.sh
+
+      - name: Container logs (when something failed)
+        if: failure()
+        run: docker compose logs --no-color --tail 60 > /tmp/out.txt 2>&1; bash ../../.github/report.sh /tmp/out.txt 1
