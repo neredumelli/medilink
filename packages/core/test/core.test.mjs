@@ -233,3 +233,14 @@ test('field keys, aliases, barcodes and blocked messages', () => {
   assert.match(c.productBlockedMessage('Pan 40', 'RECALLED', 'Batch P123 only.'), /recalled.*Batch P123/);
   assert.equal(c.canOrderProduct('BANNED'), false);
 });
+
+/* ---------- controlled medicines ---------- */
+test('Schedule X and narcotic medicines are never orderable', () => {
+  assert.equal(c.isControlledMedicine({ schedule: 'X' }), true);
+  assert.equal(c.isControlledMedicine({ schedule: 'H1', ndps: true }), true);
+  assert.equal(c.isControlledMedicine({ schedule: 'H1', ndps: false }), false);
+  const msg = c.productBlockedMessage('Addwize 10', 'ACTIVE', null, { schedule: 'X' });
+  assert.match(msg, /^Addwize 10: Schedule X and narcotic medicines cannot be ordered/);
+  assert.equal(c.productBlockedMessage('Dolo 650', 'ACTIVE', null, { schedule: 'NONE', ndps: false }), null);
+  assert.match(c.productBlockedMessage('Pan 40', 'RECALLED', 'R-1', { schedule: 'H' }), /recalled.*R-1/);
+});

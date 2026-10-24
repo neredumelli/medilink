@@ -10,6 +10,7 @@ import { AdminTabs } from '@/components/AdminTabs';
 interface Settings {
   maintenance: { on: boolean; message: string; until: string | null };
   minAppVersion: string;
+  security: { admin2faRequired: boolean; adminIpAllowList: string[] };
 }
 
 /** "2026-10-22T23:30" (local input) <-> ISO with offset */
@@ -27,7 +28,10 @@ export default function SettingsPage() {
   const [until, setUntil] = useState('');
   const [minVersion, setMinVersion] = useState('');
   const [confirming, setConfirming] = useState(false);
+  const [require2fa, setRequire2fa] = useState(true);
+  const [ipList, setIpList] = useState('');
   const canEdit = me?.role === 'SUPER_ADMIN' || me?.role === 'ADMIN_OPS';
+  const isSuper = me?.role === 'SUPER_ADMIN';
 
   const load = async () => {
     const r = await api<Settings>('/admin/settings');
@@ -35,6 +39,8 @@ export default function SettingsPage() {
     setMessage(r.maintenance.message);
     setUntil(toLocalInput(r.maintenance.until));
     setMinVersion(r.minAppVersion);
+    setRequire2fa(r.security.admin2faRequired);
+    setIpList(r.security.adminIpAllowList.join('\n'));
   };
   useEffect(() => {
     load().catch(() => {});
@@ -54,7 +60,7 @@ export default function SettingsPage() {
   const maintenanceBody = (on: boolean) => ({ maintenance: { on, message: message.trim(), until: until ? new Date(until).toISOString() : null } });
 
   return (
-    <ConsoleShell allow={(r) => ['SUPER_ADMIN', 'ADMIN_OPS', 'SUPPORT'].includes(r)} eyebrow="Super admin" title="Settings" subtitle="Maintenance mode and app versions" right={<AdminTabs />}>
+    <ConsoleShell allow={(r) => ['SUPER_ADMIN', 'ADMIN_OPS', 'SUPPORT'].includes(r)} eyebrow="Super admin" title="Settings" subtitle="Maintenance mode, app versions and admin security" right={<AdminTabs />}>
       {s && (
         <div className="cols">
           <section className="panel" style={{ border: s.maintenance.on ? '2px solid var(--sun)' : undefined }}>
@@ -120,6 +126,34 @@ export default function SettingsPage() {
               )}
             </div>
             <p className="hint" style={{ margin: 0 }}>Every change here is recorded in the activity log.</p>
+          </section>
+
+          <section className="panel">
+            <h2>Admin security</h2>
+            <label className="row" style={{ gap: 8, fontWeight: 700 }}>
+              <input type="checkbox" checked={require2fa} disabled={!isSuper} onChange={(e) => setRequire2fa(e.target.checked)} /> Every admin must use 2-step login (authenticator app)
+            </label>
+            <p className="hint" style={{ margin: 0 }}>Always on for a live system. Admins without it can only open the “My security” screen until they set it up.</p>
+            <div className="field">
+              <label htmlFor="iplist">Allow admin screens only from these addresses (one per line; leave empty to allow anywhere)</label>
+              <textarea id="iplist" rows={4} value={ipList} disabled={!isSuper} placeholder={'e.g. 203.0.113.25\n198.51.100.0/24'} onChange={(e) => setIpList(e.target.value)} />
+            </div>
+            <p className="hint" style={{ margin: 0 }}>Your own address must be in the list, so you cannot lock yourself out.</p>
+            {isSuper && (
+              <div className="actions">
+                <button
+                  className="btn"
+                  onClick={() =>
+                    save(
+                      { security: { admin2faRequired: require2fa, adminIpAllowList: ipList.split(/[\s,]+/).map((x) => x.trim()).filter(Boolean) } },
+                      'Admin security saved',
+                    )
+                  }
+                >
+                  Save admin security
+                </button>
+              </div>
+            )}
           </section>
         </div>
       )}

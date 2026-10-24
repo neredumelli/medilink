@@ -1,5 +1,5 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PrismaService } from './prisma.service';
@@ -29,6 +29,7 @@ import { SettingsService } from './common/settings.service';
 import { AccessPolicyGuard } from './common/access-policy.guard';
 import { AllErrorsFilter } from './common/error.filter';
 import { RequestRefMiddleware } from './common/request-ref';
+import { TenantInterceptor } from './common/tenant.interceptor';
 
 @Module({
   imports: [JwtModule.register({}), ThrottlerModule.forRoot({ throttlers: [{ ttl: 60_000, limit: 300 }], skipIf: () => process.env.NODE_ENV === 'test' })],
@@ -54,6 +55,8 @@ import { RequestRefMiddleware } from './common/request-ref';
     { provide: APP_GUARD, useClass: RolesGuard },
     // Maintenance mode and minimum app version, after we know who the user is.
     { provide: APP_GUARD, useClass: AccessPolicyGuard },
+    // Shop and distributor requests run in one transaction under PostgreSQL row-level security.
+    { provide: APP_INTERCEPTOR, useClass: TenantInterceptor },
     // Every error leaves in one friendly shape with a reference code.
     { provide: APP_FILTER, useClass: AllErrorsFilter },
   ],

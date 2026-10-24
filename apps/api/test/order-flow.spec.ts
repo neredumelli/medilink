@@ -9,6 +9,8 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { OtpSender } from '../src/auth/otp.sender';
 import { signBody } from '../src/sync/agent.guard';
+import { PrismaService } from '../src/prisma.service';
+import { stepAt, totpCode } from '../src/auth/totp';
 
 const codes = new Map<string, string>();
 
@@ -161,7 +163,8 @@ describe('Shop → distributor order flow', () => {
     // ML-10236 in the seed is billed by Deccan Health; Lakshmi Medical must not be able to dispatch it.
     const dhdOrder = list.body.find((o: any) => o.number === 'ML-10236');
     const other = await login('9876500002'); // Lakshmi Medical
-    await request(app.getHttpServer()).post(`/api/distributor/orders/${dhdOrder.id}/dispatch`).set({ Authorization: `Bearer ${other}` }).expect(403);
+    // Row-level security hides the order completely, so it is "not found" rather than "forbidden".
+    await request(app.getHttpServer()).post(`/api/distributor/orders/${dhdOrder.id}/dispatch`).set({ Authorization: `Bearer ${other}` }).expect(404);
   });
   // ---------------------------------------------------------------- flexible data
   const DOLO = 'dfe8c276-fb0c-5aa2-88d7-151d4065f2f9';
@@ -296,5 +299,154 @@ describe('Shop → distributor order flow', () => {
     s = await stockOf();
     expect(s.nearestExpiry.slice(0, 10)).toBe('2027-09-01');
     expect(s.batches.map((b: any) => b.batchNo)).toEqual(['B1']);
+  });
+
+  // ---------------------------------------------------------------- launch safety
+  const ANNAPURNA = '3dff5988-993a-5a35-ad55-b4b7bab53a24';
+  const SVP = 'b2971842-8470-5a33-b32d-6edf408f3b13';
+  const LMA = '565e9f67-30cc-5342-a872-e0e0fddbe2d9';
+  const ADDWIZE = 'a7c3e1d2-5b4f-4c6a-9e8d-1f2a3b4c5d6e'; // Schedule X, in stock at SVP (seed)
+  const OKACET = '6ac210a5-8098-5fae-9dfb-4611a4f6bfdf';
+
+  it('Schedule X and narcotic medicines are never offered or orderable', async () => {
+    const shop = { Authorization: `Bearer ${await login('9848012345')}` };
+    const admin = { Authorization: `Bearer ${await login('9000000001')}` };
+    const prisma = app.get(PrismaService);
+
+    const s = await request(app.getHttpServer()).get('/api/catalog/search?q=addwize').set(shop).expect(200);
+    const card = s.body.find((c: any) => c.product.id === ADDWIZE);
+    expect(card.blocked).toMatch(/Schedule X and narcotic medicines cannot be ordered/);
+    expect(card.offers).toHaveLength(0);
+    expect(card.best).toBeNull();
+    const add = await request(app.getHttpServer()).put(`/api/shop/cart/${ADDWIZE}`).set(shop).send({ qty: 1 }).expect(409);
+    expect(add.body.message).toMatch(/Schedule X/);
+
+    // Even a bug in the app could not put it in a cart: the database itself refuses.
+    await expect(prisma.cartItem.create({ data: { retailerId: ANNAPURNA, productId: ADDWIZE, distributorId: SVP, qty: 1 } })).rejects.toThrow(/MEDILINK_BLOCKED/);
+
+    // Marking a medicine narcotic blocks it at once and clears it from carts.
+    await request(app.getHttpServer()).put(`/api/shop/cart/${OKACET}`).set(shop).send({ qty: 10 }).expect(200);
+    try {
+      const r = await request(app.getHttpServer()).post(`/api/admin/products/${OKACET}/control`).set(admin).send({ schedule: 'NONE', ndps: true }).expect(201);
+      expect(r.body).toMatchObject({ controlled: true, removedFromCarts: 1 });
+      const cart = await request(app.getHttpServer()).get('/api/shop/cart').set(shop).expect(200);
+      expect(cart.body.itemCount).toBe(0);
+      await request(app.getHttpServer()).put(`/api/shop/cart/${OKACET}`).set(shop).send({ qty: 10 }).expect(409);
+      const list = await request(app.getHttpServer()).get('/api/admin/products?q=okacet').set(admin).expect(200);
+      expect(list.body[0].controlled).toBe(true);
+    } finally {
+      await request(app.getHttpServer()).post(`/api/admin/products/${OKACET}/control`).set(admin).send({ schedule: 'NONE', ndps: false }).expect(201);
+    }
+  });
+
+  it('row-level security: a shop or distributor can never reach another business’s rows', async () => {
+    const prisma = app.get(PrismaService);
+    const all = await prisma.order.count();
+    const own = await prisma.order.count({ where: { retailerId: ANNAPURNA } });
+    expect(all).toBeGreaterThan(own);
+
+    // Queries below deliberately leave out the "my shop" filter: the database applies it anyway.
+    const seen = await prisma.withTenant({ retailerId: ANNAPURNA }, () => prisma.order.count());
+    expect(seen).toBe(own);
+    const shops = await prisma.withTenant({ retailerId: ANNAPURNA }, () => prisma.retailer.findMany({ select: { id: true } }));
+    expect(shops.map((x) => x.id)).toEqual([ANNAPURNA]);
+    const links = await prisma.withTenant({ distributorId: LMA }, () => prisma.retailerDistributorLink.findMany());
+    expect(links.length).toBeGreaterThan(0);
+    expect(links.every((l) => l.distributorId === LMA)).toBe(true);
+
+    // A distributor cannot change or add another distributor's stock.
+    const changed = await prisma.withTenant({ distributorId: LMA }, () => prisma.distributorItem.updateMany({ where: { distributorId: SVP }, data: { stockQty: 0 } }));
+    expect(changed.count).toBe(0);
+    await expect(
+      prisma.withTenant({ distributorId: LMA }, () => prisma.distributorItem.create({ data: { distributorId: SVP, externalCode: 'RLS-TEST', externalName: 'Not mine', ptrPaise: 100 } })),
+    ).rejects.toThrow(/row-level security/);
+
+    // A failure inside a nested transaction rolls back only that part (savepoint).
+    const after = await prisma.withTenant({ retailerId: ANNAPURNA }, async () => {
+      await expect(prisma.$transaction(async (tx) => tx.$executeRawUnsafe('SELECT 1/0'))).rejects.toThrow();
+      return prisma.order.count();
+    });
+    expect(after).toBe(own);
+
+    // Shops still work normally through the API under these rules.
+    const shop = { Authorization: `Bearer ${await login('9848012345')}` };
+    const mine = await request(app.getHttpServer()).get('/api/shop/orders').set(shop).expect(200);
+    expect(mine.body.length).toBe(own);
+  });
+
+  it('admin 2-step login: setup, codes, recovery codes, enforcement and IP allow-list', async () => {
+    const http = () => request(app.getHttpServer());
+    const otpLogin = async (mobile: string) => {
+      await http().post('/api/auth/otp/request').send({ mobile }).expect(200);
+      return (await http().post('/api/auth/otp/verify').send({ mobile, code: codes.get(mobile) }).expect(200)).body;
+    };
+
+    // Operations admin switches on the authenticator app.
+    const first = await otpLogin('9000000002');
+    const oldOps = { Authorization: `Bearer ${first.accessToken}` };
+    await http().get('/api/admin/overview').set(oldOps).expect(200);
+    const setup = await http().post('/api/auth/2fa/setup').set(oldOps).expect(200);
+    expect(setup.body.otpauthUrl).toMatch(/^otpauth:\/\/totp\/MediLink:/);
+    expect(setup.body.qrSvgDataUrl).toMatch(/^data:image\/svg\+xml;base64,/);
+    const secret: string = setup.body.secret;
+    await http().post('/api/auth/2fa/enable').set(oldOps).send({ code: '000000' }).expect(400);
+    const usedCode = totpCode(secret, stepAt(Date.now()));
+    const enabled = await http().post('/api/auth/2fa/enable').set(oldOps).send({ code: usedCode }).expect(200);
+    expect(enabled.body.recoveryCodes).toHaveLength(10);
+
+    // Tokens from before the second step no longer open admin screens; the new session does.
+    const blocked = await http().get('/api/admin/overview').set(oldOps).expect(403);
+    expect(blocked.body.twoFactorLogin).toBe(true);
+    await http().post('/api/auth/refresh').send({ refreshToken: first.refreshToken }).expect(401);
+    await http().get('/api/admin/overview').set({ Authorization: `Bearer ${enabled.body.accessToken}` }).expect(200);
+
+    // Next login needs the app code; a code cannot be used twice.
+    const second = await otpLogin('9000000002');
+    expect(second.twoFactorRequired).toBe(true);
+    expect(second.accessToken).toBeUndefined();
+    await http().post('/api/auth/2fa/verify').send({ twoFactorToken: second.twoFactorToken, code: usedCode }).expect(401);
+    const nextCode = totpCode(secret, stepAt(Date.now()) + 1);
+    const ok = await http().post('/api/auth/2fa/verify').send({ twoFactorToken: second.twoFactorToken, code: nextCode }).expect(200);
+    await http().get('/api/admin/overview').set({ Authorization: `Bearer ${ok.body.accessToken}` }).expect(200);
+    // Refreshing keeps the second step.
+    const refreshed = await http().post('/api/auth/refresh').send({ refreshToken: ok.body.refreshToken }).expect(200);
+    await http().get('/api/admin/overview').set({ Authorization: `Bearer ${refreshed.body.accessToken}` }).expect(200);
+
+    // Lost phone: a recovery code works once.
+    const third = await otpLogin('9000000002');
+    const rec = enabled.body.recoveryCodes[0] as string;
+    const viaRecovery = await http().post('/api/auth/2fa/verify').send({ twoFactorToken: third.twoFactorToken, code: rec.toLowerCase() }).expect(200);
+    const me = await http().get('/api/auth/me').set({ Authorization: `Bearer ${viaRecovery.body.accessToken}` }).expect(200);
+    expect(me.body.twoFactor).toMatchObject({ enabled: true, recoveryCodesLeft: 9 });
+    await http().post('/api/auth/2fa/verify').send({ twoFactorToken: third.twoFactorToken, code: rec }).expect(401);
+
+    // The super admin requires 2-step login for every admin: without it, only setup screens open.
+    const superTok = { Authorization: `Bearer ${await login('9000000001')}` };
+    await http().post('/api/admin/settings').set(superTok).send({ security: { admin2faRequired: true, adminIpAllowList: [] } }).expect(201);
+    const needSetup = await http().get('/api/admin/overview').set(superTok).expect(403);
+    expect(needSetup.body.twoFactorSetup).toBe(true);
+    await http().get('/api/auth/me').set(superTok).expect(200);
+    const s2 = await http().post('/api/auth/2fa/setup').set(superTok).expect(200);
+    const sup = await http().post('/api/auth/2fa/enable').set(superTok).send({ code: totpCode(s2.body.secret, stepAt(Date.now())) }).expect(200);
+    const sAuth = { Authorization: `Bearer ${sup.body.accessToken}` };
+    await http().get('/api/admin/overview').set(sAuth).expect(200);
+
+    // IP allow-list: refuses a list that would lock you out; allows the office address.
+    const bad = await http().post('/api/admin/settings').set(sAuth).send({ security: { admin2faRequired: true, adminIpAllowList: ['203.0.113.0/24'] } }).expect(400);
+    expect(bad.body.message).toMatch(/must be in the list/);
+    await http().post('/api/admin/settings').set(sAuth).send({ security: { admin2faRequired: true, adminIpAllowList: ['127.0.0.1', '::1'] } }).expect(201);
+    await http().get('/api/admin/overview').set(sAuth).expect(200);
+
+    // Only the super admin changes security; the super admin can reset a lost authenticator.
+    const opsAuth = { Authorization: `Bearer ${refreshed.body.accessToken}` };
+    await http().post('/api/admin/settings').set(opsAuth).send({ security: { admin2faRequired: false, adminIpAllowList: [] } }).expect(403);
+    const users = await http().get('/api/admin/users?q=Operations').set(sAuth).expect(200);
+    const opsId = users.body.find((u: any) => u.mobile === '9000000002').id;
+    await http().post(`/api/admin/users/${opsId}/reset-2fa`).set(sAuth).expect(201);
+    const detail = await http().get(`/api/admin/users/${opsId}`).set(sAuth).expect(200);
+    expect(detail.body.user.twoFactorOn).toBe(false);
+    expect(detail.body.activity.map((a: any) => a.action)).toEqual(expect.arrayContaining(['user.reset_2fa', 'auth.2fa_on', 'auth.recovery_code_used']));
+
+    await http().post('/api/admin/settings').set(sAuth).send({ security: { admin2faRequired: false, adminIpAllowList: [] } }).expect(201);
   });
 });

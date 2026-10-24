@@ -21,7 +21,7 @@ interface UserRow {
   activeDevices: number;
 }
 interface Detail {
-  user: { id: string; userCode: string; name: string; mobile: string; role: RoleName; status: string; lang: string; createdAt: string; termsAcceptedAt: string | null };
+  user: { id: string; userCode: string; name: string; mobile: string; role: RoleName; status: string; lang: string; createdAt: string; termsAcceptedAt: string | null; twoFactorOn: boolean };
   business: { type: 'shop' | 'distributor'; name: string; area: string; kycStatus: string } | null;
   canDo: string[];
   devices: { id: string; deviceName: string | null; createdAt: string }[];
@@ -268,6 +268,14 @@ export default function UsersPage() {
                       Log out everywhere
                     </button>
                   </div>
+                  {me?.role === 'SUPER_ADMIN' && sel.user.twoFactorOn && (
+                    <div className="actions">
+                      <span className="pill c-green">2-step login on</span>
+                      <button className="btn small" onClick={() => act(`/admin/users/${sel.user.id}/reset-2fa`, {}, `${sel.user.name} will set up 2-step login again at next login`)}>
+                        Reset 2-step login (lost phone)
+                      </button>
+                    </div>
+                  )}
                   {me?.role === 'SUPER_ADMIN' && (
                     <div className="field">
                       <label htmlFor="role">Change role</label>

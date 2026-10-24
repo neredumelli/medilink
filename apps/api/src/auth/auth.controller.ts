@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { z } from 'zod';
 import { isIndianMobile } from '@medilink/core';
-import { AuthUser, CurrentUser, Public } from '../common/auth';
+import { AllowWithout2fa, AuthUser, CurrentUser, Public } from '../common/auth';
 import { ZodPipe } from '../common/zod.pipe';
 import { AuthService } from './auth.service';
 
@@ -23,6 +23,8 @@ const RegisterShop = z.object({
   lang: z.enum(['en', 'te', 'hi']).default('en'),
   acceptTerms: z.literal(true, { errorMap: () => ({ message: 'Please accept the terms to continue' }) }),
 });
+const SecondStep = z.object({ twoFactorToken: z.string().min(10), code: z.string().trim().min(6, 'Enter the 6-digit code').max(20) });
+const EnableTwoFactor = z.object({ code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code from the app') });
 const Refresh = z.object({ refreshToken: z.string().min(20) });
 const Lang = z.object({ lang: z.enum(['en', 'te', 'hi']) });
 
@@ -47,6 +49,34 @@ export class AuthController {
     return this.auth.verifyOtp(body.mobile, body.code, device);
   }
 
+  /** Admin login, step 2: the code from the authenticator app (or a recovery code). */
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('2fa/verify')
+  @HttpCode(200)
+  verifySecondStep(@Body(new ZodPipe(SecondStep)) body: z.infer<typeof SecondStep>, @Headers('x-device-name') device?: string) {
+    return this.auth.verifySecondStep(body.twoFactorToken, body.code, device);
+  }
+
+  /** Admin: start authenticator-app setup (secret + QR code). */
+  @ApiBearerAuth()
+  @AllowWithout2fa()
+  @Post('2fa/setup')
+  @HttpCode(200)
+  startSetup(@CurrentUser() user: AuthUser) {
+    return this.auth.startTwoFactorSetup(user.sub);
+  }
+
+  /** Admin: confirm setup with a working code. Returns recovery codes (shown once) and a new session. */
+  @ApiBearerAuth()
+  @AllowWithout2fa()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('2fa/enable')
+  @HttpCode(200)
+  enable(@CurrentUser() user: AuthUser, @Body(new ZodPipe(EnableTwoFactor)) body: z.infer<typeof EnableTwoFactor>, @Headers('x-device-name') device?: string) {
+    return this.auth.enableTwoFactor(user.sub, body.code, device);
+  }
+
   @Public()
   @Post('register/shop')
   registerShop(@Body(new ZodPipe(RegisterShop)) body: z.infer<typeof RegisterShop>, @Headers('x-device-name') device?: string) {
@@ -69,12 +99,14 @@ export class AuthController {
   }
 
   @ApiBearerAuth()
+  @AllowWithout2fa()
   @Get('me')
   me(@CurrentUser() user: AuthUser) {
     return this.auth.me(user.sub);
   }
 
   @ApiBearerAuth()
+  @AllowWithout2fa()
   @Put('me/lang')
   setLang(@CurrentUser() user: AuthUser, @Body(new ZodPipe(Lang)) body: z.infer<typeof Lang>) {
     return this.auth.setLang(user.sub, body.lang);

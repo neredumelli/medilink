@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { FieldEntity, FieldType, Prisma, ProductStatus } from '@prisma/client';
-import { fieldKeyFrom, FIELD_KEY_RE, isValidAlias, isValidBarcode, licenceState, normalizeAlias, validateCustomValues } from '@medilink/core';
+import { FieldEntity, FieldType, Prisma, ProductStatus, Schedule } from '@prisma/client';
+import { CONTROLLED_MESSAGE, fieldKeyFrom, isControlledMedicine, FIELD_KEY_RE, isValidAlias, isValidBarcode, licenceState, normalizeAlias, validateCustomValues } from '@medilink/core';
 import { PrismaService, Tx } from '../prisma.service';
 import { AuditService } from '../common/audit.service';
 import { NotifyService } from '../common/notify.service';
@@ -47,6 +47,7 @@ export class DataService {
       salt: p.salt,
       category: p.category,
       status: p.status,
+      controlled: isControlledMedicine(p),
       aliases: p._count.aliases,
       barcodes: p._count.barcodes,
       distributors: p._count.items,
@@ -69,7 +70,7 @@ export class DataService {
       this.prisma.order.count({ where: { status: OPEN, items: { some: { productId: id } } } }),
     ]);
     return {
-      product: { id: p.id, name: p.name, form: p.form, pack: p.pack, salt: p.salt, company: p.company, hsn: p.hsn, gstPct: p.gstPct, schedule: p.schedule, category: p.category, mrpPaise: p.mrpPaise, status: p.status, statusNote: p.statusNote, statusAt: p.statusAt, extra: p.extra },
+      product: { id: p.id, name: p.name, form: p.form, pack: p.pack, salt: p.salt, company: p.company, hsn: p.hsn, gstPct: p.gstPct, schedule: p.schedule, ndps: p.ndps, controlled: isControlledMedicine(p), category: p.category, mrpPaise: p.mrpPaise, status: p.status, statusNote: p.statusNote, statusAt: p.statusAt, extra: p.extra },
       aliases: p.aliases.map((a) => ({ id: a.id, alias: a.alias })),
       barcodes: p.barcodes.map((b) => b.code),
       stock: p.items.map((i) => ({
@@ -103,6 +104,28 @@ export class DataService {
     }
     const inCarts = await this.prisma.cartItem.count({ where: { productId: id } });
     return { id, status: updated.status, statusNote: updated.statusNote, shopsWithItInCart: inCarts };
+  }
+
+  /**
+   * Sets the drug schedule and narcotic flag. Making a medicine Schedule X or narcotic blocks it everywhere
+   * at once: the database removes it from carts and refuses it in new orders. Open orders are flagged to
+   * their distributors.
+   */
+  async setControl(admin: AuthUser, id: string, schedule: Schedule, ndps: boolean) {
+    const p = await this.prisma.product.findUnique({ where: { id } });
+    if (!p) throw new NotFoundException('Medicine not found');
+    const inCarts = await this.prisma.cartItem.count({ where: { productId: id } });
+    const updated = await this.asActor(admin, async (tx) => {
+      const u = await tx.product.update({ where: { id }, data: { schedule, ndps } });
+      await this.audit.log({ actorId: admin.sub, actorLabel: admin.name, action: 'product.control', entity: 'Product', entityId: id, before: { schedule: p.schedule, ndps: p.ndps }, after: { schedule, ndps } }, tx);
+      return u;
+    });
+    const nowControlled = isControlledMedicine(updated);
+    if (nowControlled && !isControlledMedicine(p)) {
+      const dists = await this.prisma.order.findMany({ where: { status: OPEN, items: { some: { productId: id } } }, select: { distributorId: true }, distinct: ['distributorId'] });
+      for (const d of dists) await this.notify.toUsersOf({ distributorId: d.distributorId }, 'product_blocked', { product: p.name, status: 'CONTROLLED', note: CONTROLLED_MESSAGE });
+    }
+    return { id, schedule: updated.schedule, ndps: updated.ndps, controlled: nowControlled, removedFromCarts: nowControlled ? inCarts : 0 };
   }
 
   async addAlias(admin: AuthUser, productId: string, raw: string) {

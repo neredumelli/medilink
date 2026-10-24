@@ -14,7 +14,9 @@ export default function Login() {
   const { t, lang, setLang, reload } = useSession();
   const [mobile, setMobile] = useState('');
   const [code, setCode] = useState('');
-  const [step, setStep] = useState<'mobile' | 'otp'>('mobile');
+  const [step, setStep] = useState<'mobile' | 'otp' | 'app'>('mobile');
+  const [twoFactorToken, setTwoFactorToken] = useState('');
+  const [appCode, setAppCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,10 +47,34 @@ export default function Login() {
         router.push('/register');
         return;
       }
+      if (res.twoFactorRequired) {
+        setTwoFactorToken(res.twoFactorToken);
+        setStep('app');
+        return;
+      }
       setSession(res);
       await reload();
       router.replace(homeFor(res.user.role));
     } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not verify');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Admins: the 6-digit code from the authenticator app, or a recovery code. */
+  async function verifyApp(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (appCode.trim().length < 6) return setError('Enter the 6-digit code from your authenticator app');
+    setBusy(true);
+    try {
+      const res = await api('/auth/2fa/verify', { body: { twoFactorToken, code: appCode.trim() } });
+      setSession(res);
+      await reload();
+      router.replace(homeFor(res.user.role));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401 && /start again/.test(err.message)) setStep('mobile');
       setError(err instanceof ApiError ? err.message : 'Could not verify');
     } finally {
       setBusy(false);
@@ -82,6 +108,21 @@ export default function Login() {
             <p className="hint" style={{ margin: 0 }}>
               No password needed. We send a one-time code by SMS.
             </p>
+          </form>
+        ) : step === 'app' ? (
+          <form onSubmit={verifyApp} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <h1>Code from your authenticator app</h1>
+            <p className="hint" style={{ margin: 0 }}>
+              Open Google Authenticator (or the app you use) and type the 6-digit MediLink code. Lost your phone? Type one of your recovery codes.
+            </p>
+            <label className="bigfield">
+              <span className="sr">Authenticator code</span>
+              <input id="appcode" className="otp" autoComplete="one-time-code" maxLength={12} value={appCode} onChange={(e) => setAppCode(e.target.value.toUpperCase().replace(/[^0-9A-Z-]/g, ''))} autoFocus />
+            </label>
+            {error && <div className="err">{error}</div>}
+            <button className="btn primary wide addbtn" disabled={busy}>
+              {busy ? '…' : t('verify')}
+            </button>
           </form>
         ) : (
           <form onSubmit={verify} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

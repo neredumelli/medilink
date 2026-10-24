@@ -1,10 +1,13 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
 import { ADMIN_ROLES, AuthUser, CurrentUser, Roles } from '../common/auth';
 import { ZodPipe } from '../common/zod.pipe';
 import { AdminService } from './admin.service';
 import { SettingsService } from '../common/settings.service';
+import { ipAllowed, isValidAllowEntry, normalizeIp } from '../common/ip';
+import { config } from '../config';
 
 const Decide = z.object({ decision: z.enum(['approve', 'changes', 'reject']), note: z.string().trim().max(300).optional() });
 const AgentKey = z.object({ software: z.enum(['MARG', 'TALLY', 'BUSY', 'GOFRUGAL', 'CSV', 'API']) });
@@ -22,6 +25,12 @@ const UpdateSettings = z.object({
     })
     .optional(),
   minAppVersion: z.string().regex(/^\d+(\.\d+){0,2}$/, 'Use a version like 1.2.0').optional(),
+  security: z
+    .object({
+      admin2faRequired: z.boolean(),
+      adminIpAllowList: z.array(z.string().trim().max(45)).max(50).default([]),
+    })
+    .optional(),
 });
 
 @ApiTags('admin')
@@ -42,7 +51,16 @@ export class AdminController {
 
   @Roles('SUPER_ADMIN', 'ADMIN_OPS')
   @Post('settings')
-  updateSettings(@CurrentUser() u: AuthUser, @Body(new ZodPipe(UpdateSettings)) b: z.infer<typeof UpdateSettings>) {
+  updateSettings(@CurrentUser() u: AuthUser, @Body(new ZodPipe(UpdateSettings)) b: z.infer<typeof UpdateSettings>, @Req() req: Request) {
+    if (b.security) {
+      if (u.role !== 'SUPER_ADMIN') throw new ForbiddenException('Only the super admin can change admin security.');
+      const list = b.security.adminIpAllowList.filter((x) => x.length > 0);
+      const bad = list.filter((x) => !isValidAllowEntry(x));
+      if (bad.length) throw new BadRequestException(`These are not valid addresses: ${bad.join(', ')}`);
+      if (!ipAllowed(req.ip, list)) throw new BadRequestException(`Your own address (${normalizeIp(req.ip)}) must be in the list, or you would lock yourself out.`);
+      if (!b.security.admin2faRequired && config().NODE_ENV === 'production') throw new BadRequestException('2-step login cannot be switched off on a live system.');
+      b.security.adminIpAllowList = list;
+    }
     return this.settings.update(u, b);
   }
 
@@ -116,6 +134,13 @@ export class AdminController {
   @Post('users/:id/role')
   role(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(SetRole)) b: z.infer<typeof SetRole>) {
     return this.admin.setUserRole(u, id, b.role);
+  }
+
+  /** Lost phone: the super admin switches off an admin's 2-step login so they can set it up again. */
+  @Roles('SUPER_ADMIN')
+  @Post('users/:id/reset-2fa')
+  reset2fa(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.admin.resetTwoFactor(u, id);
   }
 
   @Get('catalog/unmapped')

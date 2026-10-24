@@ -27,6 +27,15 @@ export class AllErrorsFilter implements ExceptionFilter {
     } else if (exception instanceof Prisma.PrismaClientKnownRequestError && exception.code === 'P2002') {
       status = HttpStatus.CONFLICT;
       body = { message: 'This already exists. Please refresh and check.' };
+    } else if (blockedByDatabase(exception)) {
+      // A database safety rule refused the change (e.g. a Schedule X medicine). Show its plain-language reason.
+      status = HttpStatus.CONFLICT;
+      body = { message: blockedByDatabase(exception)! };
+    } else if (/row-level security|permission denied for/i.test((exception as Error)?.message ?? '')) {
+      status = HttpStatus.FORBIDDEN;
+      body = { message: 'You do not have access to this' };
+      // Row-level security stopped a query the app should never have made: a bug or an attack. Always log it.
+      this.logger.warn(`${ref} ${req?.method} ${req?.url} blocked by row-level security: ${(exception as Error).message.split('\n').pop()}`);
     } else if (exception instanceof Prisma.PrismaClientInitializationError || isDbDown(exception)) {
       status = HttpStatus.SERVICE_UNAVAILABLE;
       body = { message: "We're having a technical problem. Please try again in a few minutes.", down: true };
@@ -39,6 +48,12 @@ export class AllErrorsFilter implements ExceptionFilter {
     }
     res.status(status).json({ statusCode: status, ...body, ref });
   }
+}
+
+/** The message of a MEDILINK_BLOCKED exception raised by a database trigger, if this is one. */
+export function blockedByDatabase(e: unknown): string | null {
+  const m = /MEDILINK_BLOCKED: ([^\n"]+)/.exec((e as Error)?.message ?? '');
+  return m ? `${m[1].trim().replace(/\.$/, '')}.` : null;
 }
 
 function isDbDown(e: unknown): boolean {

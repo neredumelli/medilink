@@ -9,6 +9,7 @@ const STATUS = z.enum(['ACTIVE', 'DISCONTINUED', 'BANNED', 'RECALLED']);
 const ENTITY = z.enum(['PRODUCT', 'RETAILER', 'DISTRIBUTOR']);
 const ProductFilter = z.object({ q: z.string().max(60).optional(), status: STATUS.optional() });
 const SetStatus = z.object({ status: STATUS, note: z.string().trim().max(300).optional() });
+const Control = z.object({ schedule: z.enum(['NONE', 'H', 'H1', 'X']), ndps: z.boolean() });
 const Alias = z.object({ alias: z.string().max(80) });
 const Barcode = z.object({ code: z.string().max(20) });
 const FieldFilter = z.object({ entity: ENTITY.optional() });
@@ -52,6 +53,13 @@ export class DataController {
   @Post('products/:id/status')
   setStatus(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(SetStatus)) b: z.infer<typeof SetStatus>) {
     return this.data.setStatus(u, id, b.status, b.note);
+  }
+
+  /** Drug schedule and the narcotic (NDPS) flag. Schedule X and narcotic medicines can never be ordered. */
+  @Roles('SUPER_ADMIN', 'ADMIN_OPS')
+  @Post('products/:id/control')
+  setControl(@CurrentUser() u: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(Control)) b: z.infer<typeof Control>) {
+    return this.data.setControl(u, id, b.schedule, b.ndps);
   }
 
   @Roles('SUPER_ADMIN', 'ADMIN_OPS')
