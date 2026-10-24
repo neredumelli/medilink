@@ -12,3 +12,4 @@ apps/sync-agent/inbox/*.csv
 !apps/sync-agent/inbox/.gitkeep
 .certs
 .seeded
+infra/production/.state/

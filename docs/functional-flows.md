@@ -86,7 +86,7 @@ sequenceDiagram
   participant API
   participant DB
   Owner->>App: Place orders
-  App->>API: Place (with time taken; ⏳ idempotency key)
+  App->>API: Place (with time taken + idempotency key)
   API->>DB: BEGIN transaction
   API->>DB: Lock shop's credit rows
   loop each distributor in cart
@@ -208,7 +208,7 @@ sequenceDiagram
   Hub->>DB: Restore previous values, log activity
 ```
 
-## F13. System down / maintenance — what users see ⏳
+## F13. System down / maintenance — what users see ✅
 ```mermaid
 sequenceDiagram
   actor User
@@ -233,7 +233,7 @@ sequenceDiagram
   Status-->>User: Live status and updates
 ```
 
-## F14. Bad release → rollback ⏳
+## F14. Bad release → rollback ✅
 ```mermaid
 sequenceDiagram
   participant CI as GitHub checks
@@ -250,7 +250,7 @@ sequenceDiagram
   end
 ```
 
-## F15. Disaster recovery ⏳
+## F15. Disaster recovery ✅
 ```mermaid
 sequenceDiagram
   participant DB as Database server
@@ -279,4 +279,45 @@ sequenceDiagram
   App->>PG: UPI payment
   PG->>API: Webhook (signed) → mark paid, reduce dues
   Note over API,PG: Never trust the phone's "success" alone; daily reconciliation
+```
+
+## F17. Admin login with 2-step verification ✅
+```mermaid
+sequenceDiagram
+  actor Admin
+  participant Web as Admin web
+  participant API
+  participant Phone as Authenticator app
+  Admin->>Web: Mobile number → SMS OTP
+  Web->>API: Verify OTP
+  alt 2-step login already on
+    API-->>Web: "Code from your authenticator app" (5-min login ticket, no session yet)
+    Admin->>Phone: Read 6-digit code
+    Admin->>Web: Code (or a one-time recovery code)
+    Web->>API: Verify code (one use per code; 5 wrong tries → 10-min pause)
+    API-->>Web: Session marked "2-step passed"
+  else Not set up and required (always on a live system)
+    API-->>Web: Session limited to the setup screen
+    Web->>API: Start setup → QR code
+    Admin->>Phone: Scan QR
+    Admin->>Web: First code
+    API->>API: Turn on, end older sessions, make 10 recovery codes
+    API-->>Web: Recovery codes (shown once) + full session
+  end
+  Note over API: Optional office IP allow-list checked on every admin request
+  Note over API: Lost phone → super admin resets 2-step login (logged)
+```
+
+## F18. Every shop and distributor request is fenced by the database ✅
+```mermaid
+sequenceDiagram
+  participant App as Shop / distributor app
+  participant API
+  participant DB as PostgreSQL
+  App->>API: Request with login token
+  API->>DB: BEGIN; SET LOCAL ROLE medilink_tenant; set shop / distributor id
+  API->>DB: The request's queries
+  DB-->>API: Only this business's orders, carts, links, dues (others invisible; writing them is refused)
+  API->>DB: COMMIT (or ROLLBACK on any error)
+  API-->>App: Answer
 ```

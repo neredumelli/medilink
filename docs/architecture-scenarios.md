@@ -1,6 +1,6 @@
 # MediLink — Architecture & Scenario Handbook
 
-Version 1.0 · 22 Oct 2026 · Owner: Architecture
+Version 1.1 · 24 Oct 2026 · Owner: Architecture
 
 This is the single reference for **how MediLink behaves in every situation**: normal business, edge cases, failures, attacks, growth and recovery. Every new feature must be checked against it.
 
@@ -64,7 +64,7 @@ Not used, because of licence or lock-in risk: Redis (AGPL/source-available), Mon
 | Pricing | **Price lists** (per distributor, per shop group, valid from/to) and **schemes** (free qty, % off, ₹ off, valid from/to, targeted) | 🟡 single PTR + scheme ✅ · lists ⏳ part 2 |
 | History | **Versioned** price, credit-limit and product changes ("what was the rate on 12 Oct?"): written by database triggers with the admin's name, append-only | ✅ |
 | Deletion | **Soft delete** with restore; hard delete only for legal erasure requests | 🟡 medicines never deleted (status Discontinued) ✅ · general restore ⏳ part 2 |
-| Tenant isolation | Ownership checks in every query ✅ + PostgreSQL row-level security | 🟡 RLS ⏳ part 2 |
+| Tenant isolation | Ownership checks in every query ✅ + PostgreSQL row-level security: shop and distributor requests run as a restricted database role in one transaction, so other businesses' orders, carts, links, dues and stock writes are invisible or refused even if a query forgets its filter | ✅ |
 | Money | Integer paise; totals checked by DB constraint | ✅ |
 | IDs | UUIDs internally; human codes for people (ML-10241, MLR-20417) | ✅ |
 
@@ -134,7 +134,7 @@ One pipeline for products, shops, distributors, price lists, schemes, stock, ope
 |---|---|---|
 | Only licensed shops may buy | KYC with drug licences before ordering | ✅ |
 | Schedule H/H1 drugs | Marked on screens ✅; H1 sale register export for shops | 🟡 ⏳ P3 |
-| Schedule X / narcotic (NDPS) drugs | **Not orderable on the platform**; blocked at catalogue level | ⏳ P2 |
+| Schedule X / narcotic (NDPS) drugs | **Not orderable on the platform**: hidden from offers and substitutes, refused in cart and orders, and refused by a database trigger; marking a medicine Schedule X / narcotic removes it from every cart at once | ✅ |
 | Banned drug (govt notification) or batch recall | Admin marks product/batch banned → ordering blocked instantly, shops see the note and same-salt alternatives, distributors with open orders alerted | ✅ product level · batch-level recall ⏳ part 2 |
 | GST rate change | GST % per product with effective date; orders keep the rate at time of order | 🟡 per-product ✅ · dated ⏳ |
 | MRP change | Versioned; invoices keep the MRP at time of billing | ⏳ P2 |
@@ -147,10 +147,10 @@ One pipeline for products, shops, distributors, price lists, schemes, stock, ope
 | Scenario | What the user sees | What the system does | Status |
 |---|---|---|---|
 | Planned maintenance | "Upgrading, back by 11:30 pm. Your cart is saved." | Admin › Settings switch with message + return time; screens re-check every 30 s and reopen by themselves | ✅ |
-| API crashes | Caddy fallback page: "Technical problem, back in a few minutes" | Container auto-restarts; alert sent | ⏳ deploy pkg |
-| Whole server down | App shows built-in "We'll be back" screen + status page link | Status page on a separate machine; alert; restore runbook | ⏳ deploy pkg |
-| Database down | Fallback page | Auto-restart; if the disk failed, restore from backup (RTO ≤ 1 h) | ⏳ deploy pkg |
-| Disk full | — (prevented) | Alert at 70% and 85%; log rotation; backups off-server | ⏳ deploy pkg |
+| API crashes | Caddy fallback page: "Technical problem, back in a few minutes" | Container auto-restarts; alert sent | ✅ |
+| Whole server down | App shows built-in "We'll be back" screen + status page link | Status page on a separate machine; alert; restore runbook | ✅ (status machine set up by hand once) |
+| Database down | Fallback page | Auto-restart; if the disk failed, restore from backup (RTO ≤ 1 h) | ✅ |
+| Disk full | — (prevented) | Alert at 70% and 85%; log rotation; backups off-server | ✅ |
 | Bug on one screen | "Something went wrong. [Try again] · Ref ML-7F3K2" | Error boundary on web and phone; error logged with reference | ✅ |
 | One action fails | Clear reason + "your cart is saved" + retry | Transaction rolled back; safe retry via idempotency | ✅ |
 | Slow server | "Still working…" after 5 s; timeout at 30 s with retry | Request timeouts (30 s) + "Still working…" bar; slow-query log ⏳ | 🟡 screens ✅ |
@@ -162,7 +162,7 @@ One pipeline for products, shops, distributors, price lists, schemes, stock, ope
 | Sync agent offline / PC off | Shops see "stock updated 2 h ago" | Heartbeat monitor + distributor alert | 🟡 |
 | Agent sends same bill twice | Second one ignored safely | Status rules reject duplicate billing | ✅ |
 | Agent clock wrong | Requests rejected with a clear message on the PC | Timestamp check | ✅ |
-| HTTPS certificate expiry | — | Caddy auto-renews; monitor alerts 14 days before | ⏳ deploy pkg |
+| HTTPS certificate expiry | — | Caddy auto-renews; monitor alerts 14 days before | ✅ |
 | Domain expiry | — | Auto-renew + calendar alert | ⏳ ops |
 | Time zones | All times stored UTC, shown IST | ✅ |
 
@@ -171,10 +171,10 @@ One pipeline for products, shops, distributors, price lists, schemes, stock, ope
 | Scenario | Handling | Status |
 |---|---|---|
 | Bad code reaches main | Blocked by automated checks (tests, type checks, builds) | ✅ |
-| Bad release reaches production | Versioned images; **one-command rollback (~1 min)**; auto-rollback if health check fails | ⏳ deploy pkg |
-| Database change fails | Automatic backup before every migration; two-step (expand → contract) changes so rollback never breaks data | 🟡 migrations ✅ |
+| Bad release reaches production | Versioned images; **one-command rollback (~1 min)**; auto-rollback if health check fails | ✅ drilled on every pull request |
+| Database change fails | Automatic backup before every migration; two-step (expand → contract) changes so rollback never breaks data | ✅ (rule in runbooks) |
 | Wrong setting changed | Settings are versioned and audited; revert from history | ⏳ P2 |
-| Secret leaked (key, password) | Rotate in one place; old tokens invalidated; audit review | 🟡 |
+| Secret leaked (key, password) | Rotate in one place; old tokens invalidated; audit review | ✅ runbook 7 |
 | App store rejects an update | Web keeps working; over-the-air fix via Expo updates for JS-only issues | ⏳ P3 |
 
 ## 8. Security scenarios
@@ -185,19 +185,19 @@ One pipeline for products, shops, distributors, price lists, schemes, stock, ope
 | Stolen refresh token | Rotation + reuse detection logs the user out everywhere | ✅ |
 | Lost or stolen phone | Admin/owner "log out everywhere"; optional fingerprint/Face ID to open the app | 🟡 ✅ logout · ⏳ biometric P3 |
 | SIM swap | New device login notifies other devices; sensitive actions (payments, bank) re-confirm | ⏳ P4 |
-| One shop seeing another's data | Ownership checks ✅ + row-level security ⏳ | 🟡 |
+| One shop seeing another's data | Ownership checks + PostgreSQL row-level security | ✅ |
 | Insider/admin misuse | Roles, append-only audit, **two-person approval** for credit-limit increases and bulk deletes | 🟡 ⏳ P3 |
 | Competitors scraping prices | Prices only for linked, approved shops; rate limits; bot detection on search | 🟡 |
 | Injection attacks | Parameterised queries only; input validation on every endpoint | ✅ |
-| DDoS | Caddy rate limits; cloud firewall; can add a free CDN | ⏳ deploy pkg |
+| DDoS | Caddy rate limits (per address, stricter for login codes); cloud firewall; can add a free CDN | ✅ rate limits · CDN optional |
 | Tampered sync data | HMAC signatures + timestamp | ✅ |
-| Admin account takeover | Admin 2-step login (authenticator app); IP allow-list option | ⏳ P2 |
+| Admin account takeover | Admin 2-step login (authenticator app, encrypted secrets, one-use codes, 10 recovery codes, reset by super admin; always required on a live system); optional admin IP allow-list that cannot lock out its author | ✅ |
 
 ## 9. Scale and performance scenarios
 
 | Scenario | Handling | Status |
 |---|---|---|
-| Festival or season peak (10× orders) | Stateless API → run more copies behind Caddy; DB connection pooling | ⏳ deploy pkg |
+| Festival or season peak (10× orders) | Stateless API → run more copies behind Caddy; DB connection pooling | 🟡 pooling ✅ · extra copies when needed |
 | Search slows with 1 lakh products | Trigram index ✅; result caching; pagination | 🟡 |
 | Big distributor syncs 50k items | Batches of 2,000 ✅; background processing | 🟡 |
 | Reports slow down ordering | Reports run on a read replica | ⏳ P4 |
@@ -208,13 +208,13 @@ One pipeline for products, shops, distributors, price lists, schemes, stock, ope
 
 | Item | Design |
 |---|---|
-| Database | pgBackRest: continuous change archiving + nightly full backup, encrypted, stored in another region |
+| Database | pgBackRest: continuous change archiving (≤ 5 min), weekly full + daily differential backups, on the server and encrypted off-site (any S3-compatible storage) |
 | Files (KYC documents) | restic, encrypted, daily |
-| Retention | 7 daily · 4 weekly · 12 monthly; invoices/orders kept ≈ 8 years in the live database |
+| Retention | Database: 2 weeks on the server, 90 days off-site (setting), any minute restorable in that window · Files: 7 daily · 4 weekly · 12 monthly · invoices/orders kept ≈ 8 years in the live database |
 | Targets | **Data loss ≤ 5 minutes (RPO) · back online ≤ 1 hour (RTO)** |
 | Restore to a moment | Point-in-time recovery ("before the bad import at 10:42") |
-| Proof | Automated **monthly restore test** on a scratch server, alert if it fails |
-| Runbooks | Written step-by-step: server lost · database corrupted · bad import · bad release · key leaked |
+| Proof | Automated **monthly restore test** into a scratch database, alert if it fails ✅ |
+| Runbooks | Written step-by-step (`docs/runbooks.md`): bad release · API crash · undo a mistake · database corrupted · server lost · disk full · key leaked · certificate · sync agent offline · SMS ✅ |
 
 ## 11. Operations
 
@@ -231,12 +231,12 @@ One pipeline for products, shops, distributors, price lists, schemes, stock, ope
 
 | Level | What | Status |
 |---|---|---|
-| Business rules | Unit tests for pricing, best price, search, list reading, validation, roles | ✅ 21 tests |
+| Business rules | Unit tests for pricing, best price, search, list reading, validation, roles, controlled medicines | ✅ 26 tests |
 | Sync agent | Full cycle against a signature-checking fake API | ✅ |
-| API end-to-end | OTP → search → cart → order → accept → bill → access checks; users & access | ✅ (one fix pending upload) |
+| API end-to-end | OTP → search → cart → order → accept → bill → access checks; users & access; Schedule X blocking; row-level security; admin 2-step login | ✅ 17 scenarios |
 | Database | Migrations + seed on a fresh PostgreSQL every change | ✅ |
 | Web + mobile | Type checks + production build every change | ✅ |
-| Failure drills | Kill API, kill DB, restore backup, roll back a release (quarterly) | ⏳ P5 |
+| Failure drills | App down page, backup, restore test, point-in-time restore, deploy, broken-release auto-rollback, manual rollback: automated on every pull request (`Production package` workflow) | ✅ |
 | Load | JMeter peak tests | ⏳ P5 |
 | Usability | 5 shop owners + 3 distributor staff before launch | ⏳ |
 
@@ -251,7 +251,9 @@ One pipeline for products, shops, distributors, price lists, schemes, stock, ope
 1. ~~Upload the pending test fix~~ ✅
 2. ✅ **Friendly failure screens:** error boundary + reference codes, offline vs down, maintenance mode, minimum app version, timeouts
 3. ✅ **Duplicate-order protection** (idempotency keys)
-4. 🟡 **Data model upgrade:** part 1 ✅ aliases, barcodes, batches, custom fields, history, banned/recalled products, licence expiry blocking · part 2 ⏳ reference tables, packs, price lists, schemes, general soft delete/restore, batch-level recall, row-level security
-5. **Import Hub** with templates, preview and undo
-6. **Deployment package:** Caddy (HTTPS + fallback page), pgBackRest, restic, Uptime Kuma + status page, one-command install, rollback, monitoring
-7. Then Phases 3–5 from the build prompt (returns, payments, WhatsApp ordering, ERP adapters, sales-rep app, load tests)
+4. 🟡 **Data model upgrade:** part 1 ✅ aliases, barcodes, batches, custom fields, history, banned/recalled products, licence expiry blocking · ✅ row-level security · part 2 ⏳ reference tables, packs, price lists, schemes, general soft delete/restore, batch-level recall
+5. ✅ **Launch blockers:** Schedule X / narcotic blocking, admin 2-step login + IP allow-list, row-level security
+6. ✅ **Deployment package:** Caddy (HTTPS + fallback page + rate limits), pgBackRest, restic, Uptime Kuma + status page, one-command install, deploy with auto-rollback, rollback, monitoring, monthly restore test, runbooks
+7. **Marg adapter** (needs sample export files from a real Marg install)
+8. **Import Hub** with templates, preview and undo
+9. Then Phases 3–5 from the build prompt (returns, payments, WhatsApp ordering, ERP adapters, sales-rep app, load tests)
